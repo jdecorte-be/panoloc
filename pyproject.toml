@@ -1,0 +1,19 @@
+[project]
+name = "panoloc"
+version = "0.1.0"
+description = "Use depth estimation or photogrammetry to precisely locate objects detected in images (signs, etc.), beyond the approximate position where the photo was taken."
+readme = "README.md"
+authors = [
+    { name = "perigoose", email = "perigoose@noreply.codeberg.org" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "duckdb>=1.5.6",
+]
+
+[project.scripts]
+panoloc = "panoloc:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
