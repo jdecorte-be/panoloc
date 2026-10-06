@@ -1,22 +1,54 @@
 # Panoloc
 
+Precisely geolocate the objects detected in Panoramax pictures, beyond the approximate position where each picture was taken.
+
+## Approach
+
+- **Extract**: fetch pictures of a sequence and their metadata from the Panoramax API.
+- **Rays**: the position of each detected object in the image + the camera coordinates and orientation allow us to trace an oriented half-line in the world.
+- **Locate**, 2 methods to benchmark against each other:
+  - *Triangulation* (intersect the rays of the same sign seen from several pictures).
+  - *Monocular depth* (estimate the distance along a single ray with a depth model, in this case Apple's Depth Pro.
+- **Evaluate**: display the error in meters against a reference position.
+
 ## Requirements
 
-- uv
+- [uv](https://docs.astral.sh/uv/)
 
-### Packages
-
-- duckdb
-- jupyter notebooks
-
-## Install
+## Usage
 
 ```sh
-git clone git@codeberg.org/pierreborine/panoloc.git
-cd panoloc
-uv sync     # creates .venv/ from uv.lock
+# 1. Download the target picture and its neighbors in the sequence
+# Files land in data/raw/<sequence_id>/<rank>_<picture_id>.{jpg,json}.
+uv run python -m panoloc.fetch <pic_id> # options: --window 5 --radius 100 -v
+
+# example :
+# uv run python -m panoloc.fetch cfbce3b6-2904-41aa-9837-a3d2dffec6d5 --window 10
+
+# 2. Browse them in the local app
+uv run streamlit run src/panoloc/app.py
 ```
+
+Query the metadata with the DuckDB cli:
+
+```sh
+SELECT id, properties."view:azimuth" FROM read_json('data/raw/*/*.json');
+```
+
+## Dependencies
+
+| Package | Used for |
+| --- | --- |
+| `requests` | HTTP calls to the Panoramax API and picture downloads |
+| `streamlit` | The local web app, written in plain Python |
+| `pydeck` | The app's map: camera positions and headings |
+| `pillow` | Open pictures and draw the annotation bounding boxes |
+| `watchdog` | Reloads the app as soon as a file is saved (notified by the OS instead of polling) |
 
 ## Resources
 
-- https://source.cipherbliss.com/tykayn/maxspeed-map (dédoublonnage des panneaux panoramax)
+- [maxspeed-map](https://source.cipherbliss.com/tykayn/maxspeed-map): deduplication of Panoramax sign detections
+- [Panneaux strasbourgs](https://data.strasbourg.eu/explore/dataset/signalisation_verticale/table/)
+- [Depth Pro](https://github.com/apple-aiml-research/ml-depth-pro): monocular metric depth + focal length estimation
+- [Krylov et al. 2018](https://arxiv.org/abs/1708.08417): geotagging objects from street view imagery, combining depth and triangulation
+- [maxspeed-map](https://source.cipherbliss.com/tykayn/maxspeed-map): deduplication of Panoramax sign detections
