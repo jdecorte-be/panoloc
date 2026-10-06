@@ -15,9 +15,6 @@ dependencies = [
     "watchdog>=6.0.0",
 ]
 
-[project.scripts]
-panoloc = "panoloc:main"
-
 [dependency-groups]
 dev = []
 
