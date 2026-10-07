@@ -37,13 +37,16 @@ def bbox_around(lon: float, lat: float, radius_m: float) -> str:
     return f"{lon - dlon},{lat - dlat},{lon + dlon},{lat + dlat}"
 
 
-def fetch_sequence_items(seq_id: str, bbox: str, limit: int = 10_000) -> list[Item]:
+def fetch_sequence_items(
+    seq_id: str, bbox: str, limit: int = 10_000
+) -> list[Item]:
     # /collections/{id}/items ignores bbox (it returns the whole sequence), so use
     # /search. It does not paginate: anything past `limit` is silently dropped.
     params = {"bbox": bbox, "collections": seq_id, "limit": limit}
     r = SESSION.get(f"{API}/search", params=params, timeout=TIMEOUT_S)
     r.raise_for_status()
     return r.json()["features"]
+
 
 def save_item(item: Item) -> Path:
     """Write the item as JSON, return the path where its image belongs."""
@@ -53,6 +56,7 @@ def save_item(item: Item) -> Path:
         json.dumps(item, indent=2, ensure_ascii=False)
     )
     return folder / f"{item['id']}.jpg"
+
 
 def ensure_image(url: str, dest: Path) -> None:
     """Download url to dest, unless it is already there."""
@@ -66,6 +70,7 @@ def ensure_image(url: str, dest: Path) -> None:
             for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
                 fh.write(chunk)
     tmp.replace(dest)  # atomic: a crash never leaves a half-written .jpg
+
 
 def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
     target = get_picture(pic_id)

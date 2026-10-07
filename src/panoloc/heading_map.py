@@ -1,0 +1,132 @@
+import pydeck as pdk
+
+from panoloc.bbox import Item
+from panoloc.geo import offset
+
+# length of the heading
+HEADING_LENGTH_M = 30
+
+
+def heat_color(vmax: float) -> str:
+    """deck.gl color expression: green for 0, shifting to red as value approaches vmax.
+
+    Cells with an rgb (winning group view) take that color, more opaque as value grows.
+    """
+    t = f"value / {vmax}" if vmax > 0 else "0"
+    return (
+        f"rgb ? [rgb[0], rgb[1], rgb[2], 40 + 180 * {t}]"
+        f" : [220 * {t}, 200 * (1 - {t}), 0, 90]"
+    )
+
+
+# draw the heading
+def heading_map(
+    items: list[Item],
+    current: Item,
+    bbox: list[list[float]],
+    grid: list[dict[str, list[float]]],
+    cells: list[dict[str, object]],
+    show_numbers: bool = False,
+    rays: list[dict[str, object]] | None = None,
+) -> pdk.Deck:
+    """cells: votes.vote_cells output; rays: votes.ray_lines output (None: hidden)."""
+    vmax = max((c["value"] for c in cells), default=0)
+    # label at the center of each non-zero cell
+    labels = [
+        {
+            "pos": [
+                (c["polygon"][0][0] + c["polygon"][2][0]) / 2,
+                (c["polygon"][0][1] + c["polygon"][2][1]) / 2,
+            ],
+            "text": str(round(c["value"])),
+        }
+        for c in cells
+        if show_numbers and c["value"]
+    ]
+    cameras = [
+        {
+            "pos": f["geometry"]["coordinates"],
+            "current": f["id"] == current["id"],
+            "info": f"picture {i + 1}",
+        }
+        for i, f in enumerate(items)
+    ]
+    lon, lat = current["geometry"]["coordinates"]
+    layers = [
+        pdk.Layer(
+            "PolygonLayer",
+            data=[{"polygon": bbox}],
+            get_polygon="polygon",
+            get_fill_color=[40, 120, 230, 25],
+            get_line_color=[40, 120, 230],
+            line_width_min_pixels=2,
+        ),
+        pdk.Layer(
+            "PolygonLayer",
+            id="cells",
+            data=cells,
+            pickable=True,  # hover a cell to see which groups vote for it
+            get_polygon="polygon",
+            get_fill_color=heat_color(vmax),
+            stroked=False,
+        ),
+        pdk.Layer(
+            "LineLayer",
+            data=grid,
+            get_source_position="from",
+            get_target_position="to",
+            get_color=[40, 120, 230, 60],
+            get_width=1,
+        ),
+        pdk.Layer(
+            "TextLayer",
+            data=labels,
+            get_position="pos",
+            get_text="text",
+            get_size=12,
+            get_color=[0, 0, 0],
+        ),
+        pdk.Layer(
+            "ScatterplotLayer",
+            id="cameras",
+            data=cameras,
+            pickable=True,  # click a camera to move there
+            get_position="pos",
+            get_radius="current ? 3 : 1.5",
+            get_fill_color="current ? [230, 80, 40] : [120, 120, 120]",
+            radius_min_pixels=4,
+        ),
+    ]
+    azimuth = current["properties"].get("view:azimuth")
+    if azimuth is not None:
+        line = {
+            "from": [lon, lat],
+            "to": offset(lon, lat, azimuth, HEADING_LENGTH_M),
+        }
+        layers.append(
+            pdk.Layer(
+                "LineLayer",
+                data=[line],
+                get_source_position="from",
+                get_target_position="to",
+                get_color=[230, 80, 40],
+                get_width=3,
+            )
+        )
+    if rays:
+        layers.append(
+            pdk.Layer(
+                "LineLayer",
+                id="rays",
+                data=rays,
+                pickable=True,
+                get_source_position="from",
+                get_target_position="to",
+                get_color="color",
+                get_width=1,
+            )
+        )
+    view = pdk.ViewState(longitude=lon, latitude=lat, zoom=17)
+    return pdk.Deck(
+        layers=layers, initial_view_state=view, tooltip={"html": "{info}"}
+    )
