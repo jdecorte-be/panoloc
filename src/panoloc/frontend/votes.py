@@ -26,7 +26,7 @@ PALETTE = [
 ]
 
 
-def ray_length(r, side):
+def ray_length(r, side, max_m):
     dx = math.sin(math.radians(r.bearing))
     dy = math.cos(math.radians(r.bearing))
     ts = []
@@ -35,7 +35,7 @@ def ray_length(r, side):
             ts.append((side - max(r.size, p)) / d)
         elif d < -1e-12:
             ts.append(-min(r.size, p) / d)
-    return max(0.0, min(ts, default=0.0))
+    return max(0.0, min(ts + [max_m]))
 
 
 def distinct_color(i: int) -> tuple[int, int, int]:
@@ -109,16 +109,17 @@ def ray_lines(
     lon: float,
     lat: float,
     radius_m: float,
+    max_m: float,
     only: Group | None = None,
 ) -> list[dict[str, object]]:
-    """One line per voting ray, from its camera to where it leaves the bbox."""
+    """One line per voting ray, from its camera to max_m or where it leaves the bbox."""
     side = 2 * radius_m
     lines = []
     for key, rays in groups.items():
         if only is not None and key != only:
             continue
         for r in rays:
-            d = ray_length(r, side)
+            d = ray_length(r, side, max_m)
             a = math.radians(r.bearing)
             end = (r.x + d * math.sin(a), r.y + d * math.cos(a))
             lines.append(

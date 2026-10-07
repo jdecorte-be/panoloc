@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from panoloc.annotations import annotation_heading
 from panoloc.bbox import M_PER_DEG_LAT
 from panoloc.geo import bearing_distance
+from panoloc.signs import sign_name
 
 Cell = tuple[int, int]
 Group = tuple[str, int]  # (sign type, sector of the travel direction)
@@ -24,20 +25,17 @@ class Ray:
 
 
 def sign_type_of(annot):
+    # "yes" = a sign without its type, it would only duplicate the typed ones
     values = [
         s["value"]
         for s in annot.get("semantics") or []
-        if s.get("key") == "osm|traffic_sign"
+        if s.get("key") == "osm|traffic_sign" and s.get("value") != "yes"
     ]
-    precise = [v for v in values if v != "yes"]
-    return precise[0] if precise else (values[0] if values else None)
+    return values[0] if values else None
 
 
+# to fix watching the north
 def travel_azimuths(items):
-    """Travel direction of every photo, from the previous to the next photo of its sequence.
-
-    view:azimuth is not used: it is the camera heading, and some images are rotated to the north.
-    """
     sequences = defaultdict(list)
     for item in items:
         sequences[item.get("collection")].append(item)
@@ -107,10 +105,10 @@ def ray_groups(items, lon, lat, radius_m):
 
 def group_label(key):
     sign_type, sector = key
-    return f"{sign_type} (driving {SECTORS[sector]})"
+    return f"{sign_name(sign_type)}, driving {SECTORS[sector]}"
 
 
-def vote(rays, side, cell_m):
+def vote(rays, side, cell_m, max_m):
     n = math.ceil(round(side / cell_m, 9))
     step = cell_m / 4  # should be small enough to hit every cells
     heat: Counter[Cell] = Counter()
@@ -120,9 +118,9 @@ def vote(rays, side, cell_m):
         dy = math.cos(math.radians(r.bearing))  # north
         crossed: set[Cell] = set()
         d = 0.0
-        # TODO: add max distance
         while (
             d <= r.size
+            and d <= max_m
             and 0 <= (x := r.x + d * dx) <= side
             and 0 <= (y := r.y + d * dy) <= side
         ):
@@ -147,7 +145,7 @@ def blur(grid):
     return dict(smooth)
 
 
-def the_ray_voting_algorithm(items, lon, lat, radius_m, cell_m):
+def the_ray_voting_algorithm(items, lon, lat, radius_m, cell_m, max_m):
     """
     That will be the best algorithm ever:
 
@@ -162,5 +160,6 @@ def the_ray_voting_algorithm(items, lon, lat, radius_m, cell_m):
     side = 2 * radius_m
     groups = ray_groups(items, lon, lat, radius_m)
     return {
-        key: blur(vote(group, side, cell_m)) for key, group in groups.items()
+        key: blur(vote(group, side, cell_m, max_m))
+        for key, group in groups.items()
     }

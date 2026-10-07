@@ -8,14 +8,14 @@ HEADING_LENGTH_M = 30
 
 
 def heat_color(vmax: float) -> str:
-    """deck.gl color expression: green for 0, shifting to red as value approaches vmax.
+    """deck.gl color expression: transparent for 0, dark gray shifting to red as value approaches vmax.
 
     Cells with an rgb (winning group view) take that color, more opaque as value grows.
     """
     t = f"value / {vmax}" if vmax > 0 else "0"
     return (
-        f"rgb ? [rgb[0], rgb[1], rgb[2], 40 + 180 * {t}]"
-        f" : [220 * {t}, 200 * (1 - {t}), 0, 90]"
+        f"rgb ? [rgb[0], rgb[1], rgb[2], 80 + 160 * {t}]"
+        f" : [60 + 160 * {t}, 60 * (1 - {t}), 60 * (1 - {t}), value > 0 ? 160 : 0]"
     )
 
 
@@ -75,7 +75,7 @@ def heading_map(
             data=grid,
             get_source_position="from",
             get_target_position="to",
-            get_color=[40, 120, 230, 60],
+            get_color=[40, 120, 230, 30],
             get_width=1,
         ),
         pdk.Layer(

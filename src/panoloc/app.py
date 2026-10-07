@@ -116,9 +116,12 @@ def main() -> None:
         key="radius",
     )
     cell = st.sidebar.number_input(
-        "Grid cell (m)", min_value=0.1, max_value=100.0, value=1.0, step=0.1
+        "Grid cell (m)", min_value=0.1, max_value=100.0, value=0.5, step=0.1
     )
     st.sidebar.markdown("**Heatmap**")
+    max_dist = st.sidebar.number_input(
+        "Max ray distance (m)", min_value=1, max_value=3000, value=30, step=5
+    )
     view = st.sidebar.radio("Votes", VIEWS)
     group_box = st.sidebar.container()  # filled once the groups are known
     show_numbers = st.sidebar.checkbox("Show numbers", value=False)
@@ -152,7 +155,7 @@ def main() -> None:
     # ray voting: one heatmap per (sign type, travel direction) group
     center, radius = st.session_state.search
     groups = ray_groups(items, *center, radius)
-    heats = the_ray_voting_algorithm(items, *center, radius, cell)
+    heats = the_ray_voting_algorithm(items, *center, radius, cell, max_dist)
     keys = sorted_groups(groups)
     colors = group_colors(keys)
     selected = None
@@ -171,7 +174,7 @@ def main() -> None:
         grid_cells(*center, radius, cell), heats, colors, view, selected
     )
     rays = (
-        ray_lines(groups, colors, *center, radius, only=selected)
+        ray_lines(groups, colors, *center, radius, max_dist, only=selected)
         if show_rays
         else None
     )

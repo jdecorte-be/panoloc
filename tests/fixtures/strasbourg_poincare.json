@@ -1,0 +1,156 @@
+[
+  {
+    "id_support": "20240209000002",
+    "registres_panneaux": [
+      "M9z",
+      "Eurométropole Stationnement PMR"
+    ],
+    "angles_nord_panneaux": "96, 96",
+    "geo_point_2d": {
+      "lon": 7.7424606272,
+      "lat": 48.5896871563
+    }
+  },
+  {
+    "id_support": "20240209003834",
+    "registres_panneaux": [
+      "AB6",
+      "B1"
+    ],
+    "angles_nord_panneaux": "240, 60",
+    "geo_point_2d": {
+      "lon": 7.7425047768,
+      "lat": 48.5901057605
+    }
+  },
+  {
+    "id_support": "20240209003835",
+    "registres_panneaux": [
+      "B22a"
+    ],
+    "angles_nord_panneaux": "10",
+    "geo_point_2d": {
+      "lon": 7.7425439305,
+      "lat": 48.5901557929
+    }
+  },
+  {
+    "id_support": "20240209003836",
+    "registres_panneaux": [
+      "M6a",
+      "B6a1"
+    ],
+    "angles_nord_panneaux": "244, 244",
+    "geo_point_2d": {
+      "lon": 7.7422609869,
+      "lat": 48.5900420724
+    }
+  },
+  {
+    "id_support": "20240209003876",
+    "registres_panneaux": [
+      "AB3a"
+    ],
+    "angles_nord_panneaux": "6",
+    "geo_point_2d": {
+      "lon": 7.7424147398,
+      "lat": 48.5897951272
+    }
+  },
+  {
+    "id_support": "20240209003877",
+    "registres_panneaux": [
+      "AB3a",
+      "B1"
+    ],
+    "angles_nord_panneaux": "189, 9",
+    "geo_point_2d": {
+      "lon": 7.7423330129,
+      "lat": 48.5901114674
+    }
+  },
+  {
+    "id_support": "20240209003937",
+    "registres_panneaux": [
+      "M12a",
+      "AB6",
+      "B1"
+    ],
+    "angles_nord_panneaux": "60, 60, 245",
+    "geo_point_2d": {
+      "lon": 7.7421688593,
+      "lat": 48.5897638772
+    }
+  },
+  {
+    "id_support": "20240209003938",
+    "registres_panneaux": [
+      "AB6",
+      "B2a",
+      "B1"
+    ],
+    "angles_nord_panneaux": "60, 60, 237",
+    "geo_point_2d": {
+      "lon": 7.7422206676,
+      "lat": 48.589873413
+    }
+  },
+  {
+    "id_support": "20240209003939",
+    "registres_panneaux": [
+      "M4d1",
+      "B27a"
+    ],
+    "angles_nord_panneaux": "70, 70",
+    "geo_point_2d": {
+      "lon": 7.7425369144,
+      "lat": 48.5898600589
+    }
+  },
+  {
+    "id_support": "20240209011239",
+    "registres_panneaux": [
+      "AB6",
+      "B1"
+    ],
+    "angles_nord_panneaux": "240, 60",
+    "geo_point_2d": {
+      "lon": 7.7424853989,
+      "lat": 48.59000575
+    }
+  },
+  {
+    "id_support": "20240209011251",
+    "registres_panneaux": [
+      "B22a"
+    ],
+    "angles_nord_panneaux": "6",
+    "geo_point_2d": {
+      "lon": 7.7422289064,
+      "lat": 48.5897445833
+    }
+  },
+  {
+    "id_support": "20240209011252",
+    "registres_panneaux": [
+      "B1"
+    ],
+    "angles_nord_panneaux": "10",
+    "geo_point_2d": {
+      "lon": 7.7424411111,
+      "lat": 48.5901093589
+    }
+  },
+  {
+    "id_support": "20240209012078",
+    "registres_panneaux": [
+      "M4d1",
+      "B27a"
+    ],
+    "angles_nord_panneaux": "245, 245",
+    "geo_point_2d": {
+      "lon": 7.742203145,
+      "lat": 48.590022515
+    }
+  }
+]
