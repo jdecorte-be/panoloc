@@ -14,6 +14,7 @@ SECTORS = "NESW"
 class Ray:
     x: float
     y: float
+    size: float
     bearing: float
     photo_id: str
     annotation_id: str | None
@@ -45,7 +46,10 @@ def make_rays(items, lon, lat, radius_m):
             if sign_type is None or heading is None:
                 continue
             rays.append(
-                (sign_type, Ray(x0, y0, heading, item["id"], annot.get("id")))
+                (
+                    sign_type,
+                    Ray(x0, y0, 50, heading, item["id"], annot.get("id")),
+                )
             )
     return rays
 
@@ -80,7 +84,8 @@ def vote(rays, side, cell_m):
         d = 0.0
         # TODO: add max distance
         while (
-            0 <= (x := r.x + d * dx) <= side
+            d <= r.size
+            and 0 <= (x := r.x + d * dx) <= side
             and 0 <= (y := r.y + d * dy) <= side
         ):
             crossed.add(

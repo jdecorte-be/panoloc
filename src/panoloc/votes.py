@@ -36,9 +36,9 @@ def ray_length(r, side):
     ts = []
     for p, d in ((r.x, dx), (r.y, dy)):
         if d > 1e-12:
-            ts.append((side - p) / d)
+            ts.append((side - max(r.size, p)) / d)
         elif d < -1e-12:
-            ts.append(-p / d)
+            ts.append(-min(r.size, p) / d)
     return max(0.0, min(ts, default=0.0))
 
 
