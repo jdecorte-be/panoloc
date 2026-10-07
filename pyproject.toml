@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Use depth estimation or photogrammetry to precisely locate objects detected in images (signs, etc.), beyond the approximate position where the photo was taken."
 readme = "README.md"
 authors = [
+    { name = "jdecorte", email = "jdecorte@student.42belgium.be" }
+    { name = "nthys", email = "nthys@student.42belgium.be" }
     { name = "perigoose", email = "perigoose@noreply.codeberg.org" }
+    { name = "pfauveau", email = "git@thecakeis.top" }
 ]
 requires-python = ">=3.14"
 dependencies = [
