@@ -91,12 +91,12 @@ def vote_cells(
         else:
             winner, value, rgb = None, sum(votes.values()), None
         ranked = sorted(votes.items(), key=lambda kv: -kv[1])
-        info = "<br>".join(
+        info = "\n".join(
             f"{group_label(g)}: {v:.1f}"
             for g, v in ranked[:MAX_TOOLTIP_GROUPS]
         )
         if len(ranked) > MAX_TOOLTIP_GROUPS:
-            info += f"<br>+{len(ranked) - MAX_TOOLTIP_GROUPS} more"
+            info += f"\n+{len(ranked) - MAX_TOOLTIP_GROUPS} more"
         out.append(
             {**cell, "value": value, "rgb": rgb, "info": info or "no vote"}
         )
@@ -127,7 +127,7 @@ def ray_lines(
                     "from": local_to_lonlat(lon, lat, radius_m, r.x, r.y),
                     "to": local_to_lonlat(lon, lat, radius_m, *end),
                     "color": [*colors[key], 160],
-                    "info": f"{group_label(key)}<br>bearing {r.bearing:.0f}°, travel {r.azimuth:.0f}°",
+                    "info": f"{group_label(key)}\nbearing {r.bearing:.0f}°, travel {r.azimuth:.0f}°",
                 }
             )
     return lines

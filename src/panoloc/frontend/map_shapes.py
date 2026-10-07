@@ -1,8 +1,11 @@
-"""Map overlay shapes: search bbox outline, heatmap grid, direction segments."""
+"""Map overlay shapes: search bbox outline, heatmap grid, direction segments, signs."""
 
 import math
 
 from panoloc.bbox import M_PER_DEG_LAT, bbox_around
+from panoloc.deduplication import Sign
+from panoloc.frontend.drawing import sign_label
+from panoloc.geo import local_to_lonlat
 
 
 def offset(
@@ -70,4 +73,19 @@ def grid_cells(
         }
         for i, (xa, xb) in enumerate(zip(xs, xs[1:]))
         for j, (ya, yb) in enumerate(zip(ys, ys[1:]))
+    ]
+
+
+def sign_markers(
+    signs: list[Sign], lon: float, lat: float, radius_m: float, current_id: str
+) -> list[dict[str, object]]:
+    """find_signs output -> one map point per sign, flagged when the current picture shows it."""
+    return [
+        {
+            "pos": local_to_lonlat(lon, lat, radius_m, s.x, s.y),
+            "text": f"#{s.number}",
+            "current": any(r.photo_id == current_id for r in s.rays),
+            "info": f"{sign_label(s.number, s.sign_type)}\nseen in {len(s.rays)} pictures",
+        }
+        for s in signs
     ]

@@ -5,14 +5,23 @@ import streamlit as st
 from panoloc.annotations import annotation_elevation, annotation_heading
 from panoloc.bbox import VIEWER, Item, PictureNotFound, nearby_pictures
 from panoloc.deduplication import (
+    find_signs,
     group_label,
     ray_groups,
+    sign_distances,
+    sign_numbers,
+    sign_type_of,
     the_ray_voting_algorithm,
 )
-from panoloc.frontend.drawing import annotation_label, tags_table
+from panoloc.frontend.drawing import distance_label, sign_label, tags_table
 from panoloc.frontend.heading_map import heading_map
-from panoloc.frontend.images import annotated, pano_data_url
-from panoloc.frontend.map_shapes import bbox_ring, grid_cells, grid_lines
+from panoloc.frontend.images import pano_data_url
+from panoloc.frontend.map_shapes import (
+    bbox_ring,
+    grid_cells,
+    grid_lines,
+    sign_markers,
+)
 from panoloc.frontend.panorama import move_targets, panorama, panorama_config
 from panoloc.frontend.votes import (
     ONE,
@@ -120,12 +129,13 @@ def main() -> None:
     )
     st.sidebar.markdown("**Heatmap**")
     max_dist = st.sidebar.number_input(
-        "Max ray distance (m)", min_value=1, max_value=3000, value=30, step=5
+        "Max ray distance (m)", min_value=1, max_value=3000, value=45, step=5
     )
-    view = st.sidebar.radio("Votes", VIEWS)
+    view = st.sidebar.radio("Votes", VIEWS, index=VIEWS.index(WINNER))
     group_box = st.sidebar.container()  # filled once the groups are known
     show_numbers = st.sidebar.checkbox("Show numbers", value=False)
     show_rays = st.sidebar.checkbox("Show voting rays", value=False)
+    show_signs = st.sidebar.checkbox("Show located signs", value=True)
     st.sidebar.divider()
 
     pics: list[Item] = st.session_state.get("pics", [])
@@ -156,6 +166,18 @@ def main() -> None:
     center, radius = st.session_state.search
     groups = ray_groups(items, *center, radius)
     heats = the_ray_voting_algorithm(items, *center, radius, cell, max_dist)
+    # numbered over all the pictures: a sign keeps its number from one picture to the next
+    signs = find_signs(items, *center, radius, cell, max_dist)
+    numbers = sign_numbers(signs)
+    distances = sign_distances(signs)
+    labels = tuple(
+        sign_label(numbers.get(a.get("id")), sign_type_of(a))
+        for a in annotations
+    )
+    # under each box of the 360° view: how far the sign is from the camera
+    below = tuple(
+        distance_label(distances.get(a.get("id"))) for a in annotations
+    )
     keys = sorted_groups(groups)
     colors = group_colors(keys)
     selected = None
@@ -183,8 +205,13 @@ def main() -> None:
 
     with left:
         try:
-            with st.spinner("Loading picture..."):
-                st.image(annotated(pic["jpg"], annotations), width="stretch")
+            with st.spinner("Loading 360° view..."):
+                pano = pano_data_url(pic["jpg"], annotations, labels, below)
+            panorama(
+                data=panorama_config(pano, props, move_targets(items, item)),
+                key="pano",
+                on_move_change=move_from_pano,
+            )
         except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
             st.warning(f"Could not load {pic['jpg']}: {e}")
         st.pydeck_chart(
@@ -196,6 +223,9 @@ def main() -> None:
                 cells,
                 show_numbers,
                 rays,
+                sign_markers(signs, *center, radius, item["id"])
+                if show_signs
+                else None,
             ),
             on_select=move_from_map,
             key="map",
@@ -210,20 +240,6 @@ def main() -> None:
                     for k in shown
                 )
             )
-        st.markdown(
-            "**360° view** (drag to look around, scroll to zoom, "
-            "click a blue dot to move there)"
-        )
-        try:
-            with st.spinner("Loading 360° view..."):
-                pano = pano_data_url(pic["jpg"], annotations)
-            panorama(
-                data=panorama_config(pano, props, move_targets(items, item)),
-                key="pano",
-                on_move_change=move_from_pano,
-            )
-        except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
-            st.warning(f"Could not load {pic['jpg']}: {e}")
 
     with right:
         st.link_button("Open in Panoramax", f"{VIEWER}?pic={item['id']}")
@@ -246,7 +262,7 @@ def main() -> None:
             heading = annotation_heading(annot["shape"], props)
             elevation = annotation_elevation(annot["shape"], props)
             info = (
-                f"{annotation_label(i)} — heading from camera: "
+                f"{labels[i]} — heading from camera: "
                 + ("unknown" if heading is None else f"{heading:.0f}°")
                 + ", elevation: "
                 + ("unknown" if elevation is None else f"{elevation:+.1f}°")

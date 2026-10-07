@@ -21,12 +21,14 @@ PANO_MAX_WIDTH = 4096  # px; max texture width every GPU supports
 def annotated(
     path: str,
     annotations: list[Item],
+    labels: tuple[str, ...],
+    below: tuple[str, ...] = (),
     max_width: int = MAX_DISPLAY_WIDTH,
     color: tuple[int, int, int] = BOX_COLOR,
     compact: bool = False,
 ) -> Image.Image:
     return draw_annotations(
-        Image.open(path), annotations, max_width, color, compact
+        Image.open(path), annotations, labels, below, max_width, color, compact
     )
 
 
@@ -39,8 +41,19 @@ def data_url(image: Image.Image) -> str:
 
 
 @st.cache_data(max_entries=20, show_spinner=False)
-def pano_data_url(path: str, annotations: list[Item]) -> str:
+def pano_data_url(
+    path: str,
+    annotations: list[Item],
+    labels: tuple[str, ...],
+    below: tuple[str, ...] = (),
+) -> str:
     boxed = annotated(
-        path, annotations, PANO_MAX_WIDTH, PANO_BOX_COLOR, compact=True
+        path,
+        annotations,
+        labels,
+        below,
+        PANO_MAX_WIDTH,
+        PANO_BOX_COLOR,
+        compact=True,
     )
     return data_url(boxed)
