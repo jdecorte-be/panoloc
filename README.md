@@ -18,7 +18,7 @@ Precisely geolocate the objects detected in Panoramax pictures, beyond the appro
 ## Usage
 
 ```sh
-uv run streamlit run src/panoloc/frontend/app.py
+uv run streamlit run src/panoloc/app.py
 
 # Click the LOAD button in the streamlit app
 # It will download the pictures you requested and their metadata from the Panoramax API

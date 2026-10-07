@@ -6,8 +6,12 @@ from io import BytesIO
 import streamlit as st
 from PIL import Image
 
-from panoloc.annotations import BOX_COLOR, MAX_DISPLAY_WIDTH, draw_annotations
 from panoloc.bbox import Item
+from panoloc.frontend.drawing import (
+    BOX_COLOR,
+    MAX_DISPLAY_WIDTH,
+    draw_annotations,
+)
 
 PANO_BOX_COLOR = (255, 140, 0)  # orange
 PANO_MAX_WIDTH = 4096  # px; max texture width every GPU supports

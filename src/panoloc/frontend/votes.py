@@ -1,8 +1,3 @@
-"""Turn the ray voting groups into map data: cell colors, hover text and the voting rays.
-
-Pure helpers (no Streamlit inside, easy to test).
-"""
-
 import colorsys
 import math
 from collections import defaultdict
@@ -44,15 +39,11 @@ def ray_length(r, side):
 
 
 def distinct_color(i: int) -> tuple[int, int, int]:
-    """i-th color of an endless sequence where no two colors are the same.
-
-    Hues step by the golden angle so neighbours in the sequence are far apart,
-    brightness and saturation cycle so close hues still differ.
-    """
     hue = (i * 0.618033988749895) % 1
     sat = (0.85, 0.55, 0.95)[i % 3]
     val = (0.9, 0.65, 0.75, 0.5)[i % 4]
     r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
+
     return round(r * 255), round(g * 255), round(b * 255)
 
 
@@ -77,7 +68,7 @@ def vote_cells(
 ) -> list[dict[str, object]]:
     """Fill grid_cells (no heat yet) with the value, color and hover text of the chosen view.
 
-    cells must come from geo.grid_cells, in its (column, row) order.
+    cells must come from map_shapes.grid_cells, in its (column, row) order.
     """
     n = round(len(cells) ** 0.5)
     shown = (

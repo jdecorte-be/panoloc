@@ -1,7 +1,7 @@
 import pydeck as pdk
 
 from panoloc.bbox import Item
-from panoloc.geo import offset
+from panoloc.frontend.map_shapes import offset
 
 # length of the heading
 HEADING_LENGTH_M = 30

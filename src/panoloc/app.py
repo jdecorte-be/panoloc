@@ -2,23 +2,19 @@ import re
 
 import streamlit as st
 
-from panoloc.annotations import (
-    annotation_elevation,
-    annotation_heading,
-    annotation_label,
-    tags_table,
-)
+from panoloc.annotations import annotation_elevation, annotation_heading
 from panoloc.bbox import VIEWER, Item, PictureNotFound, nearby_pictures
 from panoloc.deduplication import (
     group_label,
     ray_groups,
     the_ray_voting_algorithm,
 )
+from panoloc.frontend.drawing import annotation_label, tags_table
 from panoloc.frontend.heading_map import heading_map
 from panoloc.frontend.images import annotated, pano_data_url
+from panoloc.frontend.map_shapes import bbox_ring, grid_cells, grid_lines
 from panoloc.frontend.panorama import move_targets, panorama, panorama_config
-from panoloc.geo import bbox_ring, grid_cells, grid_lines
-from panoloc.votes import (
+from panoloc.frontend.votes import (
     ONE,
     VIEWS,
     WINNER,
