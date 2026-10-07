@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 from panoloc.annotations import annotation_heading
 from panoloc.bbox import M_PER_DEG_LAT
+from panoloc.geo import bearing_distance
 
 Cell = tuple[int, int]
-Group = tuple[str, int]  # (sign type, sector of the ray bearing)
+Group = tuple[str, int]  # (sign type, sector of the travel direction)
+MIN_MOVE_M = 0.5  # below that the GPS noise is bigger than the move
 SECTORS = "NESW"
 
 
@@ -16,6 +18,7 @@ class Ray:
     y: float
     size: float
     bearing: float
+    azimuth: float  # travel direction of the car
     photo_id: str
     annotation_id: str | None
 
@@ -30,10 +33,37 @@ def sign_type_of(annot):
     return precise[0] if precise else (values[0] if values else None)
 
 
+def travel_azimuths(items):
+    """Travel direction of every photo, from the previous to the next photo of its sequence.
+
+    view:azimuth is not used: it is the camera heading, and some images are rotated to the north.
+    """
+    sequences = defaultdict(list)
+    for item in items:
+        sequences[item.get("collection")].append(item)
+
+    azimuths = {}
+    for seq in sequences.values():
+        seq.sort(key=lambda it: it["properties"].get("datetime") or "")
+        for i, item in enumerate(seq):
+            prev = seq[max(i - 1, 0)]["geometry"]["coordinates"]
+            nxt = seq[min(i + 1, len(seq) - 1)]["geometry"]["coordinates"]
+            azimuth, dist = bearing_distance(*prev, *nxt)
+            if dist >= MIN_MOVE_M:
+                azimuths[item["id"]] = azimuth % 360
+    return azimuths
+
+
 def make_rays(items, lon, lat, radius_m):
     m_per_deg_lon = M_PER_DEG_LAT * math.cos(math.radians(lat))
+    azimuths = travel_azimuths(items)
     rays = []
     for item in items:
+        azimuth = azimuths.get(item["id"])
+        if (
+            azimuth is None
+        ):  # car not moving, no way to know which side the sign faces
+            continue
         props = item["properties"]
         cam_lon, cam_lat = item["geometry"]["coordinates"]
 
@@ -48,7 +78,15 @@ def make_rays(items, lon, lat, radius_m):
             rays.append(
                 (
                     sign_type,
-                    Ray(x0, y0, 50, heading, item["id"], annot.get("id")),
+                    Ray(
+                        x0,
+                        y0,
+                        50,
+                        heading,
+                        azimuth,
+                        item["id"],
+                        annot.get("id"),
+                    ),
                 )
             )
     return rays
@@ -58,7 +96,7 @@ def group_rays(rays_with_type):
     groups = defaultdict(list)
 
     for sign_type, r in rays_with_type:
-        sector = int(((r.bearing + 45) % 360) // 90)  # 0=N, 1=E, 2=S, 3=W
+        sector = int(((r.azimuth + 45) % 360) // 90)  # 0=N, 1=E, 2=S, 3=W
         groups[(sign_type, sector)].append(r)
     return groups
 
@@ -69,7 +107,7 @@ def ray_groups(items, lon, lat, radius_m):
 
 def group_label(key):
     sign_type, sector = key
-    return f"{sign_type} (rays toward {SECTORS[sector]})"
+    return f"{sign_type} (driving {SECTORS[sector]})"
 
 
 def vote(rays, side, cell_m):

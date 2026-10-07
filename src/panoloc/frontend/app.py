@@ -14,10 +14,10 @@ from panoloc.deduplication import (
     ray_groups,
     the_ray_voting_algorithm,
 )
+from panoloc.frontend.heading_map import heading_map
+from panoloc.frontend.images import annotated, pano_data_url
+from panoloc.frontend.panorama import move_targets, panorama, panorama_config
 from panoloc.geo import bbox_ring, grid_cells, grid_lines
-from panoloc.heading_map import heading_map
-from panoloc.images import annotated, pano_data_url
-from panoloc.panorama import move_targets, panorama, panorama_config
 from panoloc.votes import (
     ONE,
     VIEWS,
@@ -153,7 +153,7 @@ def main() -> None:
     props: Item = item["properties"]
     annotations: list[Item] = props.get("annotations") or []
 
-    # ray voting: one heatmap per (sign type, ray direction) group
+    # ray voting: one heatmap per (sign type, travel direction) group
     center, radius = st.session_state.search
     groups = ray_groups(items, *center, radius)
     heats = the_ray_voting_algorithm(items, *center, radius, cell)
@@ -200,10 +200,6 @@ def main() -> None:
             ),
             on_select=move_from_map,
             key="map",
-        )
-        st.caption(
-            f"{len(keys)} vote groups (sign type × ray direction). "
-            "Hover a cell to see which groups vote for it, and how much."
         )
         if rays or view == WINNER:  # legend: one color per group
             shown = [selected] if selected else keys
