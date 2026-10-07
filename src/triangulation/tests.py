@@ -211,25 +211,29 @@ def test() -> None:
             "12: Expected ImpossibleTriangleError, got", e.__class__.__name__
         )
         print("\033[0;42mOK\033[0m")
+    print()
 
 
 def test_many() -> None:
     """Test battery for triangulate_many function."""
+    # 1
     # A____
     #     /
     #    /|
     #   B |
     #     C
-    print(
-        triangulate_many(
-            [
-                Node(Point(1, 5), 90),
-                Node(Point(3, 2), 45),
-                Node(Point(6, 1), 0),
-            ]
-        )
-    )
+    print("1:")
+    for key, value in triangulate_many(
+        [
+            Node(Point(1, 5), 90),
+            Node(Point(3, 2), 45),
+            Node(Point(6, 1), 0),
+        ]
+    ).items():
+        print(f"{key}: {value},")
+    print()
 
+    # 2
     #    D
     #     \
     # A____X
@@ -237,17 +241,19 @@ def test_many() -> None:
     #    /|
     #   B |
     #     C
-    print(
-        triangulate_many(
-            [
-                Node(Point(1, 5), 90),
-                Node(Point(3, 2), 45),
-                Node(Point(6, 1), 0),
-                Node(Point(5, 7), 150),
-            ]
-        )
-    )
+    print("2:")
+    for key, value in triangulate_many(
+        [
+            Node(Point(1, 5), 90),
+            Node(Point(3, 2), 45),
+            Node(Point(6, 1), 0),
+            Node(Point(5, 7), 150),
+        ]
+    ).items():
+        print(f"{key}: {value},")
+    print()
 
+    # 3
     #    D
     #     \
     # A____X
@@ -255,30 +261,33 @@ def test_many() -> None:
     #    /| \
     #   B |  E
     #     C
-    print(
-        triangulate_many(
-            [
-                Node(Point(1, 5), 90),
-                Node(Point(3, 2), 45),
-                Node(Point(6, 1), 0),
-                Node(Point(5, 7), 150),
-                Node(Point(9, 2), -45),
-            ]
-        )
-    )
+    print("3:")
+    for key, value in triangulate_many(
+        [
+            Node(Point(1, 5), 90),
+            Node(Point(3, 2), 45),
+            Node(Point(6, 1), 0),
+            Node(Point(5, 7), 150),
+            Node(Point(9, 2), -45),
+        ]
+    ).items():
+        print(f"{key}: {value},")
+    print()
 
+    # 4
     # A____X
     #     /\
     #    /| \
     #   B |  E
     #     C
-    print(
-        triangulate_many(
-            [
-                Node(Point(1, 5), 90),
-                Node(Point(3, 2), 45),
-                Node(Point(6, 1), 0),
-                Node(Point(9, 2), -45),
-            ]
-        )
-    )
+    print("4:")
+    for key, value in triangulate_many(
+        [
+            Node(Point(1, 5), 90),
+            Node(Point(3, 2), 45),
+            Node(Point(6, 1), 0),
+            Node(Point(9, 2), -45),
+        ]
+    ).items():
+        print(f"{key}: {value},")
+    print()
