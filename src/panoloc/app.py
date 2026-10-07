@@ -13,10 +13,19 @@ from typing import Any
 
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v2 as components_v2
 from PIL import Image, ImageDraw, ImageFont
 
-from panoloc.bbox import PictureNotFound, _session, bbox_around, nearby_pictures
-from panoloc.fetch import M_PER_DEG_LAT, TIMEOUT_S, VIEWER, Item
+from panoloc.bbox import (
+    M_PER_DEG_LAT,
+    SESSION,
+    TIMEOUT_S,
+    VIEWER,
+    Item,
+    PictureNotFound,
+    bbox_around,
+    nearby_pictures,
+)
 
 DEFAULT_URL = (
     "https://explore.panoramax.fr/fr/index?focus=map&map=15.12/48.589898/7.741354"
@@ -72,17 +81,18 @@ def draw_annotations(
     draw = ImageDraw.Draw(overlay)
     if compact:
         width, fill, outline = 2, (*color, PANO_FILL_ALPHA), (*color, 230)
-        font = ImageFont.load_default(size=PANO_LABEL_PX)
+        font_px = PANO_LABEL_PX
     else:  # line thickness and letters grow with picture size
         width, fill, outline = max(2, out.width // 500), None, (*color, 255)
-        font = ImageFont.load_default(size=max(14, out.width // 60))
+        font_px = max(14, out.width // 60)
+    font = ImageFont.load_default(size=font_px)
     for n, annot in enumerate(annotations):
         pts = [(x * scale, y * scale) for x, y in shape_to_xy(annot["shape"])]
         draw.polygon(pts, fill=fill, outline=outline, width=width)
         x_min = min(x for x, _ in pts)
         y_min = min(y for _, y in pts)
         draw.text(
-            (x_min, y_min - font.size - 4),
+            (x_min, y_min - font_px - 4),
             annotation_label(n),
             fill=outline,
             font=font,
@@ -216,7 +226,7 @@ def tags_table(semantics: list[Item] | None) -> list[dict[str, str]]:
 @st.cache_data(max_entries=50, show_spinner=False)  # HD pictures are a few MB each
 def download(url: str) -> bytes:
     """Raw picture bytes, fetched once and shared by the flat and 360° views."""
-    r = _session.get(url, timeout=TIMEOUT_S)
+    r = SESSION.get(url, timeout=TIMEOUT_S)
     r.raise_for_status()
     return r.content
 
@@ -371,7 +381,7 @@ export default async function ({{ data, parentElement, setTriggerValue }}) {{
 }}
 """
 
-panorama = st.components.v2.component(
+panorama = components_v2.component(
     "panorama", css=PANO_CSS, js=PANO_JS, isolate_styles=False
 )
 
@@ -468,9 +478,10 @@ def main() -> None:
                 st.image(annotated(pic["hd"], annotations), width="stretch")
         except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
             st.warning(f"Could not load {pic['hd']}: {e}")
-        center, radius = st.session_state.search
+        radius = st.session_state.search
+        (lon, lat), radius = st.session_state.search
         st.pydeck_chart(
-            heading_map(items, item, bbox_ring(*center, radius)),
+            heading_map(items, item, bbox_ring(lon, lat, radius)),
             on_select=move_from_map,
             key="map",
         )

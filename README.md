@@ -18,14 +18,6 @@ Precisely geolocate the objects detected in Panoramax pictures, beyond the appro
 ## Usage
 
 ```sh
-# 1. Download the target picture and its neighbors in the sequence
-# Files land in data/raw/<sequence_id>/<rank>_<picture_id>.{jpg,json}.
-uv run python -m panoloc.fetch <pic_id> # options: --window 5 --radius 100 -v
-
-# example :
-# uv run python -m panoloc.fetch cfbce3b6-2904-41aa-9837-a3d2dffec6d5 --window 10
-
-# 2. Browse them in the local app
 uv run streamlit run src/panoloc/app.py
 ```
 

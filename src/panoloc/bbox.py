@@ -1,19 +1,25 @@
 import math
+from typing import Any
 
 import requests
 
 API = "https://api.panoramax.xyz/api"
-TIMEOUT = 10
+VIEWER = "https://api.panoramax.xyz/"
+M_PER_DEG_LAT = 111_320  # meters per degree of latitude (approx.)
+TIMEOUT_S = 10
 
-_session = requests.Session()
+# A STAC item is untyped JSON: all we know is "an object with string keys".
+Item = dict[str, Any]
+
+SESSION = requests.Session()
 
 
 class PictureNotFound(Exception):
     pass
 
 
-def get_picture(pic_id: str) -> dict:
-    r = _session.get(f"{API}/search", params={"ids": pic_id}, timeout=TIMEOUT)
+def get_picture(pic_id: str) -> Item:
+    r = SESSION.get(f"{API}/search", params={"ids": pic_id}, timeout=TIMEOUT_S)
     r.raise_for_status()
     features = r.json()["features"]
     if not features:
@@ -22,21 +28,21 @@ def get_picture(pic_id: str) -> dict:
 
 
 def bbox_around(lon: float, lat: float, radius_m: float) -> str:
-    dlat = radius_m / 111_320
+    dlat = radius_m / M_PER_DEG_LAT
     dlon = dlat / math.cos(math.radians(lat))
     return f"{lon - dlon},{lat - dlat},{lon + dlon},{lat + dlat}"
 
 
-def fetch_sequence_items(seq_id: str, bbox: str, limit: int = 10_000) -> list[dict]:
+def fetch_sequence_items(seq_id: str, bbox: str, limit: int = 10_000) -> list[Item]:
     # /collections/{id}/items ignores bbox (it returns the whole sequence), so use
     # /search. It does not paginate: anything past `limit` is silently dropped.
     params = {"bbox": bbox, "collections": seq_id, "limit": limit}
-    r = _session.get(f"{API}/search", params=params, timeout=TIMEOUT)
+    r = SESSION.get(f"{API}/search", params=params, timeout=TIMEOUT_S)
     r.raise_for_status()
     return r.json()["features"]
 
 
-def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[dict]:
+def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
     target = get_picture(pic_id)
     lon, lat = target["geometry"]["coordinates"]
     seq = target["collection"]
@@ -49,8 +55,8 @@ def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[dict]:
             "datetime": f["properties"].get("datetime"),
             "lon": f["geometry"]["coordinates"][0],
             "lat": f["geometry"]["coordinates"][1],
-            "thumb": f"{API}/pictures/{f['id']}/thumb.jpg",
-            "hd": f"{API}/pictures/{f['id']}/hd.jpg",
+            "thumb": f["assets"]["thumb"]["href"],
+            "hd": f["assets"]["hd"]["href"],
             "item": f,  # full STAC item: annotations, azimuth, tags...
         }
         for f in items
