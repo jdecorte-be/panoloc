@@ -1,8 +1,12 @@
+import json
 import math
+from pathlib import Path
 from typing import Any
 
 import requests
 
+DATA_DIR = Path("data/raw")
+CHUNK_SIZE = 1 << 16  # 64 KiB per read when streaming an image
 API = "https://api.panoramax.xyz/api"
 VIEWER = "https://api.panoramax.xyz/"
 M_PER_DEG_LAT = 111_320  # meters per degree of latitude (approx.)
@@ -41,6 +45,27 @@ def fetch_sequence_items(seq_id: str, bbox: str, limit: int = 10_000) -> list[It
     r.raise_for_status()
     return r.json()["features"]
 
+def save_item(item: Item) -> Path:
+    """Write the item as JSON, return the path where its image belongs."""
+    folder = DATA_DIR / item["collection"]
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{item['id']}.json").write_text(
+        json.dumps(item, indent=2, ensure_ascii=False)
+    )
+    return folder / f"{item['id']}.jpg"
+
+def ensure_image(url: str, dest: Path) -> None:
+    """Download url to dest, unless it is already there."""
+    if dest.exists():
+        return
+    tmp = dest.with_suffix(".jpg.part")
+    # stream=True: read chunk by chunk, the image is never fully in RAM
+    with SESSION.get(url, stream=True, timeout=TIMEOUT_S) as r:
+        r.raise_for_status()
+        with tmp.open("wb") as fh:
+            for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
+                fh.write(chunk)
+    tmp.replace(dest)  # atomic: a crash never leaves a half-written .jpg
 
 def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
     target = get_picture(pic_id)
@@ -71,4 +96,8 @@ def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
         for p in pics
         if p["id"] == pic_id or p["item"]["properties"].get("annotations")
     ]
+    for p in pics:
+        path = save_item(p["item"])
+        ensure_image(p["hd"], path)
+        p["jpg"] = str(path)  # local file: what the app and the algos read
     return sorted(pics, key=lambda p: p["datetime"] or "")

@@ -18,8 +18,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from panoloc.bbox import (
     M_PER_DEG_LAT,
-    SESSION,
-    TIMEOUT_S,
     VIEWER,
     Item,
     PictureNotFound,
@@ -223,25 +221,15 @@ def tags_table(semantics: list[Item] | None) -> list[dict[str, str]]:
 # ---------- data loading (cached: Streamlit reruns the script on every click) ----------
 
 
-@st.cache_data(max_entries=50, show_spinner=False)  # HD pictures are a few MB each
-def download(url: str) -> bytes:
-    """Raw picture bytes, fetched once and shared by the flat and 360° views."""
-    r = SESSION.get(url, timeout=TIMEOUT_S)
-    r.raise_for_status()
-    return r.content
-
-
 @st.cache_data(max_entries=20, show_spinner=False)
 def annotated(
-    hd_url: str,
+    path: str,
     annotations: list[Item],
     max_width: int = MAX_DISPLAY_WIDTH,
     color: tuple[int, int, int] = BOX_COLOR,
     compact: bool = False,
 ) -> Image.Image:
-    return draw_annotations(
-        Image.open(BytesIO(download(hd_url))), annotations, max_width, color, compact
-    )
+    return draw_annotations(Image.open(path), annotations, max_width, color, compact)
 
 
 def data_url(image: Image.Image) -> str:
@@ -252,9 +240,9 @@ def data_url(image: Image.Image) -> str:
 
 
 @st.cache_data(max_entries=20, show_spinner=False)
-def pano_data_url(hd_url: str, annotations: list[Item]) -> str:
+def pano_data_url(path: str, annotations: list[Item]) -> str:
     """The 360° texture: boxed, downscaled to PANO_MAX_WIDTH, JPEG-encoded."""
-    boxed = annotated(hd_url, annotations, PANO_MAX_WIDTH, PANO_BOX_COLOR, compact=True)
+    boxed = annotated(path, annotations, PANO_MAX_WIDTH, PANO_BOX_COLOR, compact=True)
     return data_url(boxed)
 
 
@@ -410,7 +398,7 @@ def load_from_url() -> None:
         return
     radius = st.session_state.radius
     try:
-        with st.spinner("Searching Panoramax..."):
+        with st.spinner("Downloading pictures..."):
             pics = nearby_pictures(pic_id, radius)
     except PictureNotFound:
         st.session_state.url_error = f"Picture not found: {pic_id}"
@@ -475,9 +463,9 @@ def main() -> None:
     with left:
         try:
             with st.spinner("Loading picture..."):
-                st.image(annotated(pic["hd"], annotations), width="stretch")
+                st.image(annotated(pic["jpg"], annotations), width="stretch")
         except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
-            st.warning(f"Could not load {pic['hd']}: {e}")
+            st.warning(f"Could not load {pic['jpg']}: {e}")
         radius = st.session_state.search
         (lon, lat), radius = st.session_state.search
         st.pydeck_chart(
@@ -497,14 +485,14 @@ def main() -> None:
         )
         try:
             with st.spinner("Loading 360° view..."):
-                pano = pano_data_url(pic["hd"], annotations)
+                pano = pano_data_url(pic["jpg"], annotations)
             panorama(
                 data=panorama_config(pano, props, move_targets(items, item)),
                 key="pano",
                 on_move_change=move_from_pano,
             )
         except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
-            st.warning(f"Could not load {pic['hd']}: {e}")
+            st.warning(f"Could not load {pic['jpg']}: {e}")
 
     with right:
         st.link_button("Open in Panoramax", f"{VIEWER}?pic={item['id']}")
@@ -539,4 +527,5 @@ def main() -> None:
             st.json(item)
 
 
-main()
+if __name__ == "__main__":
+    main()

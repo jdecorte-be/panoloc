@@ -19,12 +19,16 @@ Precisely geolocate the objects detected in Panoramax pictures, beyond the appro
 
 ```sh
 uv run streamlit run src/panoloc/app.py
+
+# Click the LOAD button in the streamlit app
+# It will download the pictures you requested and their metadata from the Panoramax API
+# The corresponding files are stored in data/raw/<sequence_id>/<picture_id>.{jpg,json}
 ```
 
 Query the metadata with the DuckDB cli:
 
 ```sh
-SELECT id, properties."view:azimuth" FROM read_json('data/raw/*/*.json');
+SELECT * FROM read_json('data/raw/*/*.json');
 ```
 
 ## Dependencies
