@@ -12,6 +12,33 @@ from scipy.ndimage.morphology import binary_fill_holes as imfill
 
 from panoloc.annotations import annotation_heading
 
+"""
+# Status
+
+On our hardware, the bellow code takes about 25 seconds per image and yields
+wrong results.
+
+## Correctness
+
+Apple's Depth Pro model is trained on flat images and we currently hand it 360
+images.
+To solve this, we could either:
+
+1. Swap it with a model specialised in 360 images such as
+[CRF360D](https://vlislab22.github.io/CRF360D/). (cons: dataset is not public).
+
+2. (preferred) Split the 360 image into flat images. (using parts of panoflat).
+
+## Speed
+
+The images we tested are about 75.5 megapixels, which is 33 times bigger than
+the 2.25 megapixels images the paper recommends. Additionally, we didn't have
+access to gpu computing, which could further speed it up.
+
+Using smaller (sd) or split images would be ideal but it requires transposing
+the signs's pixels coordinates into the new images.
+"""
+
 
 class PictureNotFound(Exception):
     """The requested picture was not found with the API"""
@@ -167,6 +194,7 @@ class DepthEstimator:
             self._log(" - SIGN:", sign["id"], end=" at ", flush=True)
             polygon = np.array(sign["shape"]["coordinates"][0])
 
+            # PERF: necessary ?
             depth_b = depth.copy()
 
             # Apply the mask and extract the polygon
