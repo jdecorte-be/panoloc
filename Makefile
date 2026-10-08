@@ -18,6 +18,19 @@ FROM_ROW     ?= 0
 TO_ROW       ?=
 # times a failed batch is retried before it is skipped
 RETRIES      ?= 2
+# times `make locate` and `make push-signs` start again after a crash: they go on from the cache
+RESTARTS     ?= 20
+
+# runs $(1) again when it crashes (killed by the OOM killer, connection lost...),
+# not when it is stopped (Ctrl-C, kill) or misused (exit status 2)
+define restarting
+	@trap 'exit 130' INT TERM; \
+	for ((run = 1; ; run++)); do \
+		$(1) && exit 0; status=$$?; \
+		((status == 2 || status == 130 || status == 143 || run > $(RESTARTS))) && exit $$status; \
+		echo "crashed (exit status $$status), restart $$run/$(RESTARTS) in 30 s" >&2; sleep 30; \
+	done
+endef
 
 .PHONY: help install run test lint format db-up db-down db-logs db-shell db-reset db-index populate locate push-signs web-install web-dev clean
 
@@ -91,10 +104,10 @@ db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(INDEXES_JS)
 
 locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, hours for the world)
-	uv run python -m panoloc.locate
+	$(call restarting,uv run python -m panoloc.locate)
 
 push-signs: ## Locate the signs of every picture and replace the ones of SIGNS_URI with their type and position
-	uv run python -m panoloc.push_signs
+	$(call restarting,uv run python -m panoloc.push_signs)
 
 web-install: ## Install the web app dependencies
 	pnpm --dir web install

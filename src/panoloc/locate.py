@@ -26,12 +26,15 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Iterable, Iterator
-from concurrent.futures import Future, ProcessPoolExecutor
+from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import CancelledError, Future, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+from tqdm import tqdm
 
 from panoloc.bbox import M_PER_DEG_LAT, Item, pictures, to_item
 from panoloc.deduplication import find_signs
@@ -48,8 +51,11 @@ ALGORITHM = ("annotations.py", "deduplication.py", "geo.py", "triangulation.py")
 PORT = 8765
 # tiles waiting to be located: a long pan over the city drops the oldest ones
 MAX_WAITING = 2000
-# tiles located at once by a fill, between two progress lines
+# tiles located at once by a fill
 CHUNK_TILES = 2000
+# times a tile is located before it is given up: a worker that crashes (out of
+# memory...) takes the tiles of the others with it, located again in a new pool
+MAX_ATTEMPTS = 3
 
 Tile = tuple[int, int]
 # a tile and the parameters it is located with
@@ -147,7 +153,7 @@ def seen_tiles(max_m: float = MAX_DIST_M) -> list[Tile]:
     docs = pictures().find(
         {"semantics.key": TRAFFIC_SIGN}, {"_id": 0, "geometry.coordinates": 1}
     )
-    for doc in docs:
+    for doc in tqdm(docs, desc="listing the tiles", unit=" pictures", unit_scale=True):
         lon, lat = doc["geometry"]["coordinates"]
         dlon = dlat / math.cos(math.radians(lat))
         tiles.update(tiles_of(lon - dlon, lat - dlat, lon + dlon, lat + dlat))
@@ -208,6 +214,11 @@ class Locator:
         self.running: set[Key] = set()
         self.pool: ProcessPoolExecutor | None = None
         self.pool_fingerprint: str | None = None
+        self.attempts: dict[Key, int] = {}  # the tiles that failed, and how often
+        self.failed: set[Key] = set()  # given up after MAX_ATTEMPTS
+        self.closed = False
+        # called once per tile located or given up, from a pool's thread
+        self.on_done: Callable[[], None] | None = None
         self.counts_lock = threading.Lock()  # guards the fields below
         # tile -> its signs and the sums of their coordinates, for the default
         # parameters; the tiles without a sign are left out
@@ -308,24 +319,32 @@ class Locator:
     def _fill(self) -> None:
         """Start the waiting tiles while there are idle workers. Lock held."""
         current = fingerprint()
-        if current != self.pool_fingerprint:
-            # spawned, not forked: the new workers import the edited code
-            if self.pool:
-                self.pool.shutdown(wait=False, cancel_futures=True)
-            self.pool = ProcessPoolExecutor(
-                self.workers,
-                mp_context=multiprocessing.get_context("spawn"),
-                initializer=_exit_with,
-                initargs=(os.getpid(),),
-            )
-            self.pool_fingerprint = current
         while self.waiting and len(self.running) < self.workers:
+            if self.pool is None or current != self.pool_fingerprint:
+                old = self.pool
+                # spawned, not forked: the new workers import the edited code
+                self.pool = ProcessPoolExecutor(
+                    self.workers,
+                    mp_context=multiprocessing.get_context("spawn"),
+                    initializer=_exit_with,
+                    initargs=(os.getpid(),),
+                )
+                self.pool_fingerprint = current
+                # after: the tiles it cancels come back here, for the new pool
+                if old:
+                    old.shutdown(wait=False, cancel_futures=True)
             key = self.waiting.pop()
+            try:
+                future = self.pool.submit(locate_tile, key)
+            except BrokenProcessPool:  # a worker crashed: before its tiles say so
+                self.waiting.append(key)
+                self.pool = None
+                continue
             self.running.add(key)
-            future = self.pool.submit(locate_tile, key)
-            future.add_done_callback(partial(self._finished, key))
+            future.add_done_callback(partial(self._finished, key, self.pool))
 
-    def _finished(self, key: Key, future: Future) -> None:
+    def _finished(self, key: Key, pool: ProcessPoolExecutor, future: Future) -> None:
+        retry = done = broken = False
         try:
             located_with, signs = future.result()
             self.cache.update_one(
@@ -334,15 +353,38 @@ class Locator:
                 upsert=True,
             )
             self._count(key, located_with, signs)
+            done = True
+        except CancelledError:
+            retry = True  # by a new pool, for edited code: not the tile's fault
         except Exception as e:  # noqa: BLE001 - one tile, the others go on
-            print(f"tile {tile_id(*key)} failed: {e!r}", file=sys.stderr)
+            attempts = self.attempts.get(key, 0) + 1
+            retry = attempts < MAX_ATTEMPTS
+            # above the progress bar, if any
+            tqdm.write(
+                f"tile {tile_id(*key)} failed ({attempts}/{MAX_ATTEMPTS}): {e!r}",
+                file=sys.stderr,
+            )
+            self.attempts[key] = attempts
+            if not retry:
+                self.failed.add(key)
+                done = True
+            broken = isinstance(e, BrokenProcessPool)
         with self.changed:
+            if broken and self.pool is pool:
+                self.pool = None  # a new one on the next fill
             self.running.discard(key)
-            self._fill()
+            if retry and not self.closed:
+                self.waiting.append(key)
+            if not self.closed:
+                self._fill()
+            # held: counted before locate returns
+            if done and self.on_done:
+                self.on_done()
             self.changed.notify_all()
 
     def close(self) -> None:
         with self.changed:
+            self.closed = True
             self.waiting.clear()
             if self.pool:
                 self.pool.shutdown(wait=False, cancel_futures=True)
@@ -375,20 +417,19 @@ class Locator:
 def locate_chunks(
     locator: Locator, tiles: list[Tile], cell_m: float, max_m: float
 ) -> Iterator[dict[Key, list[Item]]]:
-    """The located tiles, CHUNK_TILES at a time, with a progress line per chunk."""
-    start = time.monotonic()
-    for first in range(0, len(tiles), CHUNK_TILES):
-        keys = [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
-        found = locator.locate(keys, wait_s=math.inf)
-        done = first + len(keys)
-        elapsed = time.monotonic() - start
-        left = elapsed / done * (len(tiles) - done)
-        print(
-            f"{done}/{len(tiles)} tiles, {elapsed / 3600:.1f} h, ~{left / 3600:.1f} h left",
-            file=sys.stderr,
-            flush=True,
-        )
-        yield found
+    """The located tiles, CHUNK_TILES at a time, under a progress bar."""
+    signs = 0
+    with tqdm(total=len(tiles), unit="tile", smoothing=0.01) as bar:
+        locator.on_done = partial(bar.update, 1)
+        for first in range(0, len(tiles), CHUNK_TILES):
+            keys = [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
+            found = locator.locate(keys, wait_s=math.inf)
+            # the cached ones, not seen by on_done
+            bar.update(first + len(keys) - bar.n)
+            signs += sum(map(len, found.values()))
+            bar.set_postfix(signs=signs, failed=len(locator.failed))
+            yield found
+        locator.on_done = None
 
 
 def serve(port: int) -> None:
@@ -488,7 +529,10 @@ def main() -> None:
         signs += sum(map(len, found.values()))
         located += len(found)
     locator.close()
-    print(f"{signs} signs in {located}/{len(tiles)} tiles", file=sys.stderr)
+    print(
+        f"{signs} signs in {located}/{len(tiles)} tiles ({len(locator.failed)} failed)",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":

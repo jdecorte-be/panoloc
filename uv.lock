@@ -1033,6 +1033,7 @@ dependencies = [
     { name = "requests" },
     { name = "scipy" },
     { name = "streamlit" },
+    { name = "tqdm" },
     { name = "watchdog" },
 ]
 
@@ -1051,6 +1052,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "streamlit", specifier = ">=1.65.0" },
+    { name = "tqdm", specifier = ">=4.70.1" },
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
