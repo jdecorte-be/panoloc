@@ -1,7 +1,7 @@
 """Located signs for the web map: a small HTTP server in front of find_signs.
 
     python -m panoloc.locate serve [--port 8765]
-    python -m panoloc.locate WEST,SOUTH,EAST,NORTH   # fill the cache of an area
+    python -m panoloc.locate [WEST,SOUTH,EAST,NORTH]   # fill the cache: an area, or every picture
 
 find_signs slows down much faster than the area grows (26 s for 1 x 0.6 km of
 Strasbourg): the map asks for fixed tiles, located in a pool of processes and kept
@@ -26,7 +26,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from concurrent.futures import Future, ProcessPoolExecutor
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +48,8 @@ ALGORITHM = ("annotations.py", "deduplication.py", "geo.py", "triangulation.py")
 PORT = 8765
 # tiles waiting to be located: a long pan over the city drops the oldest ones
 MAX_WAITING = 2000
+# tiles located at once by a fill, between two progress lines
+CHUNK_TILES = 2000
 
 Tile = tuple[int, int]
 # a tile and the parameters it is located with
@@ -135,6 +137,21 @@ def tiles_of(west: float, south: float, east: float, north: float) -> list[Tile]
         for i in range(math.floor(west / TILE_DEG), math.ceil(east / TILE_DEG))
         for j in range(math.floor(south / TILE_DEG), math.ceil(north / TILE_DEG))
     ]
+
+
+def seen_tiles(max_m: float = MAX_DIST_M) -> list[Tile]:
+    """Every tile whose signs a picture with a traffic sign may see: the tiles its
+    camera is within max_m of, as area_items grows a tile. In order, by column."""
+    tiles: set[Tile] = set()
+    dlat = max_m / M_PER_DEG_LAT
+    docs = pictures().find(
+        {"semantics.key": TRAFFIC_SIGN}, {"_id": 0, "geometry.coordinates": 1}
+    )
+    for doc in docs:
+        lon, lat = doc["geometry"]["coordinates"]
+        dlon = dlat / math.cos(math.radians(lat))
+        tiles.update(tiles_of(lon - dlon, lat - dlat, lon + dlon, lat + dlat))
+    return sorted(tiles)
 
 
 def tile_name(tile: Tile) -> str:
@@ -355,6 +372,25 @@ class Locator:
         return found | self.cached(missing)
 
 
+def locate_chunks(
+    locator: Locator, tiles: list[Tile], cell_m: float, max_m: float
+) -> Iterator[dict[Key, list[Item]]]:
+    """The located tiles, CHUNK_TILES at a time, with a progress line per chunk."""
+    start = time.monotonic()
+    for first in range(0, len(tiles), CHUNK_TILES):
+        keys = [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
+        found = locator.locate(keys, wait_s=math.inf)
+        done = first + len(keys)
+        elapsed = time.monotonic() - start
+        left = elapsed / done * (len(tiles) - done)
+        print(
+            f"{done}/{len(tiles)} tiles, {elapsed / 3600:.1f} h, ~{left / 3600:.1f} h left",
+            file=sys.stderr,
+            flush=True,
+        )
+        yield found
+
+
 def serve(port: int) -> None:
     locator = Locator()
 
@@ -429,7 +465,11 @@ def serve(port: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("target", help='"serve", or west,south,east,north to fill')
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help='"serve", or west,south,east,north to fill (none: every picture)',
+    )
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--cell", type=float, default=CELL_M)
     parser.add_argument("--max-dist", type=float, default=MAX_DIST_M)
@@ -437,13 +477,18 @@ def main() -> None:
     if args.target == "serve":
         serve(args.port)
         return
-    west, south, east, north = (float(v) for v in args.target.split(","))
-    keys = [(t, args.cell, args.max_dist) for t in tiles_of(west, south, east, north)]
-    found = Locator(max_waiting=math.inf).locate(keys, wait_s=math.inf)
-    print(
-        f"{sum(map(len, found.values()))} signs in {len(found)}/{len(keys)} tiles",
-        file=sys.stderr,
-    )
+    if args.target:
+        west, south, east, north = (float(v) for v in args.target.split(","))
+        tiles = tiles_of(west, south, east, north)
+    else:
+        tiles = seen_tiles(args.max_dist)
+    locator = Locator(max_waiting=math.inf)
+    signs = located = 0
+    for found in locate_chunks(locator, tiles, args.cell, args.max_dist):
+        signs += sum(map(len, found.values()))
+        located += len(found)
+    locator.close()
+    print(f"{signs} signs in {located}/{len(tiles)} tiles", file=sys.stderr)
 
 
 if __name__ == "__main__":

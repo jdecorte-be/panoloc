@@ -6,10 +6,8 @@ INDEXES_JS   ?= sql/indexes.js
 PROGRESS_AWK ?= sql/progress.awk
 # the lines of mongoimport hidden under the bar: its connection, its own progress, a summary without failures
 MONGOIMPORT_NOISE := /\tconnected to: |\t[0-9.]+[KMGT]?B$$|imported successfully\. 0 document\(s\) failed/
-# Strasbourg: the extent of its ground truth (data.strasbourg.eu signalisation_verticale)
-# plus ~200 m, so the pictures just outside that still see its signs are kept
-LOCATE_BBOX  ?= 7.540,48.439,7.848,48.704
-# xmin,ymin,xmax,ymax of the pictures to import: the whole world (POPULATE_BBOX=$(LOCATE_BBOX) for Strasbourg only)
+# xmin,ymin,xmax,ymax of the pictures to import: the whole world
+# (POPULATE_BBOX=7.540,48.439,7.848,48.704 for Strasbourg only: its ground truth plus ~200 m)
 POPULATE_BBOX ?= -180,-90,180,90
 COLLECTION   ?= pictures
 PARQUET      ?= https://api.panoramax.xyz/data/geoparquet/panoramax.parquet
@@ -92,11 +90,11 @@ db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 	docker compose exec -T mongodb sh -c 'mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
 		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(INDEXES_JS)
 
-locate: ## Locate the signs of LOCATE_BBOX ahead of the web map (cached in MongoDB)
-	uv run python -m panoloc.locate $(LOCATE_BBOX)
+locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, hours for the world)
+	uv run python -m panoloc.locate
 
-push-signs: ## Push the type and position of the signs of LOCATE_BBOX to SIGNS_URI
-	uv run python -m panoloc.push_signs $(LOCATE_BBOX)
+push-signs: ## Locate the signs of every picture and replace the ones of SIGNS_URI with their type and position
+	uv run python -m panoloc.push_signs
 
 web-install: ## Install the web app dependencies
 	pnpm --dir web install

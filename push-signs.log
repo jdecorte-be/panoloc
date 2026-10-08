@@ -1,0 +1,2 @@
+uv run python -m panoloc.push_signs
+listing the tiles of the pictures
