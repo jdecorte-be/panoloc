@@ -2,6 +2,10 @@
 SHELL        := /bin/bash
 POPULATE_SQL ?= sql/populate.sql
 INDEXES_JS   ?= sql/indexes.js
+# draws the progress bar of `make populate`
+PROGRESS_AWK ?= sql/progress.awk
+# the lines of mongoimport hidden under the bar: its connection, its own progress, a summary without failures
+MONGOIMPORT_NOISE := /\tconnected to: |\t[0-9.]+[KMGT]?B$$|imported successfully\. 0 document\(s\) failed/
 # Strasbourg: the extent of its ground truth (data.strasbourg.eu signalisation_verticale)
 # plus ~200 m, so the pictures just outside that still see its signs are kept
 LOCATE_BBOX  ?= 7.540,48.439,7.848,48.704
@@ -57,16 +61,18 @@ populate: db-up ## Stream the DuckDB query into MongoDB, BATCH_ROWS parquet rows
 	rows=$$(duckdb -noheader -list -c "SELECT num_rows FROM parquet_file_metadata('$(PARQUET)')") || exit 1; \
 	to=$(if $(TO_ROW),$(TO_ROW),$$((rows - 1))); failed=(); \
 	IFS=, read -r xmin ymin xmax ymax <<< "$(POPULATE_BBOX)"; \
+	start=$$(date +%s); batch=0; batches=$$(((to - $(FROM_ROW)) / $(BATCH_ROWS) + 1)); \
 	for ((first = $(FROM_ROW); first <= to; first += $(BATCH_ROWS))); do \
-		last=$$((first + $(BATCH_ROWS) - 1)); ((last > to)) && last=$$to; \
+		last=$$((first + $(BATCH_ROWS) - 1)); ((last > to)) && last=$$to; batch=$$((batch + 1)); \
 		for ((try = 0; try <= $(RETRIES); try++)); do \
 			((try)) && { echo "batch $$first-$$last failed, retry $$try/$(RETRIES) in 10 s"; sleep 10; }; \
-			echo "parquet rows $$first-$$last of $$rows"; \
 			{ echo "SET VARIABLE parquet = '$(PARQUET)';"; \
 			  echo "SET VARIABLE first_row = $$first; SET VARIABLE last_row = $$last;"; \
 			  echo "SET VARIABLE xmin = $$xmin; SET VARIABLE ymin = $$ymin; SET VARIABLE xmax = $$xmax; SET VARIABLE ymax = $$ymax;"; \
 			  cat $(POPULATE_SQL); } \
 			| duckdb -bail \
+			| awk -v first=$$first -v last=$$last -v from=$(FROM_ROW) -v to=$$to -v start=$$start \
+				-v batch=$$batch -v batches=$$batches -f $(PROGRESS_AWK) 2>&3 \
 			| docker compose exec -T mongodb sh -c \
 				'mongoimport -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin \
 				--db "$$MONGO_INITDB_DATABASE" --collection $(COLLECTION) --mode=upsert' \
@@ -74,7 +80,7 @@ populate: db-up ## Stream the DuckDB query into MongoDB, BATCH_ROWS parquet rows
 		done; \
 		echo "batch $$first-$$last skipped, moving on to the next one"; \
 		failed+=("$$first $$last"); \
-	done; \
+	done 3>&2 2> >(awk '$(MONGOIMPORT_NOISE) {next} {printf "\r\033[K%s\n", $$0; fflush()}' >&2); \
 	$(MAKE) db-index || exit 1; \
 	if (( $${#failed[@]} )); then \
 		echo "$${#failed[@]} batch(es) skipped, import them with:"; \

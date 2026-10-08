@@ -64,7 +64,8 @@ function Legend({ located }: { located: LocatedSign[] }) {
   );
 }
 
-const ROW = "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-line";
+// taller on touch screens
+const ROW = "flex w-full items-center gap-2 rounded px-1.5 py-2 text-left hover:bg-line md:py-1";
 
 /** The sign the view was opened for, and the pictures that see it. */
 function SignSection({
@@ -182,16 +183,27 @@ export function SignPanel({
   onPicture,
   onClose,
 }: SignPanelProps) {
+  // phones: a bottom sheet below the map, its details folded away by default
+  const [expanded, setExpanded] = useState(false);
+  const details = expanded ? "" : " max-md:hidden";
   const sign = selected && located.find((s) => s.id === selected.sign);
   return (
-    <aside className="absolute left-4 top-4 z-10 max-h-[calc(100%-2rem)] w-[min(20rem,calc(100%-5rem))] overflow-y-auto rounded-lg bg-surface p-4 text-sm shadow-lg">
-      <div className="flex items-start justify-between gap-2">
-        <h1 className="text-base font-semibold">panoloc</h1>
+    <aside className="relative z-10 max-h-[50dvh] shrink-0 overflow-y-auto border-t border-line bg-surface px-4 py-3 text-sm md:absolute md:top-4 md:left-4 md:max-h-[calc(100%-2rem)] md:w-[min(20rem,calc(100%-5rem))] md:rounded-lg md:border-0 md:p-4 md:shadow-lg">
+      <div className="flex items-center gap-2">
+        <h1 className="flex-1 text-base font-semibold">panoloc</h1>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          aria-expanded={expanded}
+          className="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-line md:hidden"
+        >
+          {expanded ? "Less ▾" : "More ▴"}
+        </button>
         {selected && (
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-1.5 text-muted hover:bg-line"
+            className="rounded px-2 py-1 text-muted hover:bg-line md:px-1.5 md:py-0"
             aria-label="Close the 360° view (Esc)"
             title="Close the 360° view (Esc)"
           >
@@ -199,34 +211,36 @@ export function SignPanel({
           </button>
         )}
       </div>
-      <p className="mb-2 text-xs text-muted">
+      <p className={"mb-2 text-xs text-muted" + details}>
         Traffic signs at their triangulated position (find_signs), from the Panoramax pictures
         that see them.
       </p>
       <StatusLine status={status} signs={located.length} cameras={cameras} />
-      <label className="mt-2 flex items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          checked={showRays}
-          onChange={(e) => onShowRays(e.target.checked)}
-        />
-        Show the rays from the cameras
-      </label>
-      {selected ? (
-        <>
-          {sign && (
-            <SignSection
-              key={sign.id}
-              sign={sign}
-              pictureId={selected.pictureId}
-              onPicture={onPicture}
-            />
-          )}
-          <PictureSection selected={selected} boxes={boxes} onFocus={onFocus} />
-        </>
-      ) : (
-        <Legend located={located} />
-      )}
+      <div className={details}>
+        <label className="mt-2 flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={showRays}
+            onChange={(e) => onShowRays(e.target.checked)}
+          />
+          Show the rays from the cameras
+        </label>
+        {selected ? (
+          <>
+            {sign && (
+              <SignSection
+                key={sign.id}
+                sign={sign}
+                pictureId={selected.pictureId}
+                onPicture={onPicture}
+              />
+            )}
+            <PictureSection selected={selected} boxes={boxes} onFocus={onFocus} />
+          </>
+        ) : (
+          <Legend located={located} />
+        )}
+      </div>
     </aside>
   );
 }

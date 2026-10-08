@@ -502,36 +502,39 @@ export function SignMap() {
   );
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
-      {selected && (
-        <Panorama
-          key={selected.pictureId}
-          pictureId={selected.pictureId}
-          labels={labels}
-          focus={selected.focus}
-          onFocus={onFocus}
-          onBearing={onBearing}
-        />
-      )}
-      <div
-        className={
-          selected
-            ? // above the navbar of the 360° view
-              "absolute right-4 bottom-14 z-10 h-[min(16rem,40%)] w-[min(24rem,calc(100%-2rem))] overflow-hidden rounded-lg shadow-xl ring-2 ring-white/80 [&_.maplibregl-ctrl-top-right]:hidden"
-            : "absolute inset-0"
-        }
-      >
-        {/* sized, not positioned: maplibre-gl.css makes it position: relative */}
-        <div ref={container} className="h-full w-full" />
+    // phones: the panel below the map; wider screens: floating over it
+    <div className="relative flex h-full w-full flex-col overflow-hidden md:block">
+      <div className="relative min-h-0 flex-1 md:absolute md:inset-0">
         {selected && (
-          <button
-            type="button"
-            onClick={() => setSelected(null)}
-            className="absolute top-2 left-2 rounded bg-surface px-2 py-1 text-xs font-medium shadow hover:bg-background"
-          >
-            ⤢ Full map
-          </button>
+          <Panorama
+            key={selected.pictureId}
+            pictureId={selected.pictureId}
+            labels={labels}
+            focus={selected.focus}
+            onFocus={onFocus}
+            onBearing={onBearing}
+          />
         )}
+        <div
+          className={
+            selected
+              ? // above the navbar of the 360° view, smaller on phones
+                "absolute right-2 bottom-12 z-10 h-[min(16rem,35%)] w-[min(24rem,50%)] overflow-hidden rounded-lg shadow-xl ring-2 ring-white/80 md:right-4 md:bottom-14 md:h-[min(16rem,40%)] md:w-[min(24rem,calc(100%-2rem))] [&_.maplibregl-ctrl-top-right]:hidden"
+              : "absolute inset-0"
+          }
+        >
+          {/* sized, not positioned: maplibre-gl.css makes it position: relative */}
+          <div ref={container} className="h-full w-full" />
+          {selected && (
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="absolute top-2 left-2 rounded bg-surface px-2 py-1 text-xs font-medium shadow hover:bg-background"
+            >
+              ⤢ Full map
+            </button>
+          )}
+        </div>
       </div>
       <SignPanel
         status={status}
