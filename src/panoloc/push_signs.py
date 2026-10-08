@@ -1,4 +1,4 @@
-"""Push every sign the algorithm locates to another MongoDB: their type and position only.
+"""Push every sign the algorithm locates to another MongoDB: their type, position and rays.
 
     SIGNS_URI=mongodb://... python -m panoloc.push_signs
 
@@ -69,6 +69,9 @@ def main() -> None:
     parser.add_argument("--uri", default=os.environ.get("SIGNS_URI"))
     parser.add_argument("--db", default=DATABASE)
     parser.add_argument("--collection", default=COLLECTION)
+    parser.add_argument(
+        "--workers", type=int, help="processes locating tiles (default: one per CPU)"
+    )
     args = parser.parse_args()
     if not args.uri:
         parser.error("the target MongoDB: --uri or SIGNS_URI")
@@ -78,7 +81,7 @@ def main() -> None:
     retried(staging.drop, "dropping the staging")  # left by a stopped run
 
     tiles = seen_tiles(MAX_DIST_M)
-    locator = Locator(max_waiting=math.inf)
+    locator = Locator(args.workers, max_waiting=math.inf)
     pushed = located = 0
     try:
         for found in locate_chunks(locator, tiles, CELL_M, MAX_DIST_M):
@@ -87,6 +90,16 @@ def main() -> None:
                 {
                     "type": s["sign"],
                     "location": {"type": "Point", "coordinates": s["position"]},
+                    # [picture id, annotation id, camera lon, camera lat, bearing,
+                    # distance], the nearest first: the web map's RayTuple
+                    "rays": sorted(
+                        (
+                            [r["pictureId"], r["annotationId"], *r["camera"]]
+                            + [r["bearing"], r["distance"]]
+                            for r in s["rays"]
+                        ),
+                        key=lambda r: r[5],
+                    ),
                 }
                 for tile_signs in found.values()
                 for s in tile_signs

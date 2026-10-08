@@ -359,16 +359,17 @@ class Locator:
         except Exception as e:  # noqa: BLE001 - one tile, the others go on
             attempts = self.attempts.get(key, 0) + 1
             retry = attempts < MAX_ATTEMPTS
+            broken = isinstance(e, BrokenProcessPool)
             # above the progress bar, if any
             tqdm.write(
-                f"tile {tile_id(*key)} failed ({attempts}/{MAX_ATTEMPTS}): {e!r}",
+                f"tile {tile_id(*key)} failed ({attempts}/{MAX_ATTEMPTS}): "
+                + ("a worker crashed" if broken else repr(e)),
                 file=sys.stderr,
             )
             self.attempts[key] = attempts
             if not retry:
                 self.failed.add(key)
                 done = True
-            broken = isinstance(e, BrokenProcessPool)
         with self.changed:
             if broken and self.pool is pool:
                 self.pool = None  # a new one on the next fill
@@ -418,22 +419,30 @@ def locate_chunks(
     locator: Locator, tiles: list[Tile], cell_m: float, max_m: float
 ) -> Iterator[dict[Key, list[Item]]]:
     """The located tiles, CHUNK_TILES at a time, under a progress bar."""
-    signs = 0
+    chunks = [
+        [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
+        for first in range(0, len(tiles), CHUNK_TILES)
+    ]
+    signs = done = 0
     with tqdm(total=len(tiles), unit="tile", smoothing=0.01) as bar:
         locator.on_done = partial(bar.update, 1)
-        for first in range(0, len(tiles), CHUNK_TILES):
-            keys = [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
+        for n, keys in enumerate(chunks):
+            if n + 1 < len(chunks):
+                # queued under this chunk: located by the workers it leaves idle
+                # at its end, and while the caller handles it
+                locator.locate(chunks[n + 1], wait_s=0)
             found = locator.locate(keys, wait_s=math.inf)
-            # the cached ones, not seen by on_done
-            bar.update(first + len(keys) - bar.n)
+            done += len(keys)
+            # the cached ones, not seen by on_done (ahead: the next chunk's)
+            bar.update(max(0, done - bar.n))
             signs += sum(map(len, found.values()))
             bar.set_postfix(signs=signs, failed=len(locator.failed))
             yield found
         locator.on_done = None
 
 
-def serve(port: int) -> None:
-    locator = Locator()
+def serve(port: int, workers: int | None = None) -> None:
+    locator = Locator(workers)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -514,16 +523,19 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--cell", type=float, default=CELL_M)
     parser.add_argument("--max-dist", type=float, default=MAX_DIST_M)
+    parser.add_argument(
+        "--workers", type=int, help="processes locating tiles (default: one per CPU)"
+    )
     args = parser.parse_args()
     if args.target == "serve":
-        serve(args.port)
+        serve(args.port, args.workers)
         return
     if args.target:
         west, south, east, north = (float(v) for v in args.target.split(","))
         tiles = tiles_of(west, south, east, north)
     else:
         tiles = seen_tiles(args.max_dist)
-    locator = Locator(max_waiting=math.inf)
+    locator = Locator(args.workers, max_waiting=math.inf)
     signs = located = 0
     for found in locate_chunks(locator, tiles, args.cell, args.max_dist):
         signs += sum(map(len, found.values()))

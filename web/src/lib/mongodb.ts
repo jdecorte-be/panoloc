@@ -1,5 +1,7 @@
 import { MongoClient, type Collection, type Document } from "mongodb";
 
+import type { RayTuple } from "@/lib/types";
+
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB ?? "panoloc";
 const collectionName = process.env.MONGODB_COLLECTION ?? "pictures";
@@ -37,6 +39,8 @@ export interface SignDoc {
   /** OSM traffic_sign value, e.g. "FR:B14[50]" */
   type: string;
   location: { type: "Point"; coordinates: [number, number] };
+  /** one per picture that sees it, the nearest first: absent when pushed before they were kept */
+  rays?: RayTuple[];
 }
 
 /** The located signs pushed by `make push-signs` (src/panoloc/push_signs.py). */

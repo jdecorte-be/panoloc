@@ -1,5 +1,13 @@
 import { signs } from "@/lib/mongodb";
 import { TILE_DEG } from "@/lib/tiles";
+import type { RayTuple } from "@/lib/types";
+
+/** A sign of `make push-signs`: its type, position and rays. */
+export interface PushedSign {
+  sign: string;
+  position: [number, number];
+  rays: RayTuple[];
+}
 
 // the counts held in memory are read again after that: a `make push-signs` run
 // replaces the whole collection at once
@@ -10,11 +18,9 @@ export function tileOf([lon, lat]: [number, number]): [number, number] {
   return [Math.floor(lon / TILE_DEG), Math.floor(lat / TILE_DEG)];
 }
 
-/** "i:j" -> the [type, lon, lat] of its signs, for each of these tiles (all of them, even empty). */
-export async function signsOfTiles(
-  tiles: [number, number][],
-): Promise<Map<string, [string, number, number][]>> {
-  const found = new Map(tiles.map(([i, j]) => [`${i}:${j}`, [] as [string, number, number][]]));
+/** "i:j" -> its signs, for each of these tiles (all of them, even empty). */
+export async function signsOfTiles(tiles: [number, number][]): Promise<Map<string, PushedSign[]>> {
+  const found = new Map(tiles.map(([i, j]) => [`${i}:${j}`, [] as PushedSign[]]));
   const is = tiles.map(([i]) => i);
   const js = tiles.map(([, j]) => j);
   // one tile around: the geodesic edges of the polygon bulge a little from the
@@ -34,11 +40,11 @@ export async function signsOfTiles(
         },
       },
     },
-    { projection: { _id: 0, type: 1, "location.coordinates": 1 } },
+    { projection: { _id: 0, type: 1, "location.coordinates": 1, rays: 1 } },
   );
-  for await (const { type, location } of docs) {
-    const [lon, lat] = location.coordinates;
-    found.get(tileOf([lon, lat]).join(":"))?.push([type, lon, lat]);
+  for await (const { type, location, rays } of docs) {
+    const position = location.coordinates;
+    found.get(tileOf(position).join(":"))?.push({ sign: type, position, rays: rays ?? [] });
   }
   return found;
 }
@@ -85,6 +91,13 @@ function tileCounts(): Promise<TileCounts> {
     if (globalForCounts._tileCounts?.counts === counts) globalForCounts._tileCounts = undefined;
   });
   return counts;
+}
+
+/** The signs of the whole collection, from the counts held in memory. */
+export async function totalSigns(): Promise<number> {
+  let total = 0;
+  for (const [n] of (await tileCounts()).values()) total += n;
+  return total;
 }
 
 /**

@@ -59,10 +59,6 @@ const CAMERA = "rgb(120, 120, 120)";
 // radius of the disc behind a pictogram, of the dot of a sign without one
 const SIGN_DISC_PX = ICON_PX / 2 + 3;
 const SIGN_DOT_PX = 5;
-// farthest a picture sees a sign from, as find_signs (locate.MAX_DIST_M): the
-// signs of `make push-signs` have no rays, the pictures near them stand in
-const SEEN_M = 45;
-const M_PER_DEG_LAT = 111_320;
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 const COMPACT = new Intl.NumberFormat("en", { notation: "compact" });
@@ -122,12 +118,6 @@ function rayLines(signs: LocatedSign[]): FeatureCollection<LineString> {
       })),
     ),
   };
-}
-
-/** Meters between two [lon, lat], flat: a few tens of meters apart. */
-function meters(a: [number, number], b: [number, number]): number {
-  const cos = Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
-  return Math.hypot((a[0] - b[0]) * cos, a[1] - b[1]) * M_PER_DEG_LAT;
 }
 
 /** Tiles per side of a square of counts: a power of two, COUNT_PX wide or so. */
@@ -350,7 +340,6 @@ export function SignMap() {
   const tilesRef = useRef(new Map<string, CachedSign[]>());
   // the map's click handlers are bound once: they read the latest signs here
   const locatedRef = useRef<LocatedSign[]>([]);
-  const camerasRef = useRef<CamerasResponse["cameras"]>([]);
   const [status, setStatus] = useState<MapStatus>({ kind: "loading" });
   const [located, setLocated] = useState<LocatedSign[]>([]);
   const [cameraCount, setCameraCount] = useState(0);
@@ -379,7 +368,6 @@ export function SignMap() {
     try {
       const body = await getJson<CamerasResponse>(`/api/cameras?bbox=${bbox}`, signal);
       if (mapRef.current !== map) return;
-      camerasRef.current = body.cameras;
       map.getSource<GeoJSONSource>("cameras")?.setData({
         type: "FeatureCollection",
         features: body.cameras.map(([pictureId, lon, lat]) => ({
@@ -497,28 +485,14 @@ export function SignMap() {
     const selectSign = (e: { features?: MapGeoJSONFeature[] }) => {
       const id = e.features?.[0]?.properties.id as string | undefined;
       const sign = locatedRef.current.find((s) => s.id === id);
-      if (!sign) return;
-      const ray = sign.rays.find((r) => r.annotationId) ?? sign.rays[0];
-      if (ray) {
-        setSelected({
-          pictureId: ray.pictureId,
-          position: ray.camera,
-          focus: ray.annotationId ?? undefined,
-          sign: sign.id,
-        });
-        return;
-      }
-      // no rays: the nearest picture with a traffic sign, turned to a box of its
-      // type once its detections arrive
-      const nearest = camerasRef.current
-        .map(([pictureId, lon, lat]) => ({
-          pictureId,
-          position: [lon, lat] as [number, number],
-          distance: meters([lon, lat], sign.position),
-        }))
-        .filter((c) => c.distance <= SEEN_M)
-        .sort((a, b) => a.distance - b.distance)[0];
-      if (nearest) setSelected({ pictureId: nearest.pictureId, position: nearest.position, sign: sign.id });
+      const ray = sign?.rays.find((r) => r.annotationId) ?? sign?.rays[0];
+      if (!sign || !ray) return;
+      setSelected({
+        pictureId: ray.pictureId,
+        position: ray.camera,
+        focus: ray.annotationId ?? undefined,
+        sign: sign.id,
+      });
     };
     for (const layer of ["sign-discs", "sign-icons", "sign-labels"]) {
       map.on("click", layer, (e) => {
@@ -584,16 +558,7 @@ export function SignMap() {
     if (!pictureId) return;
     const controller = new AbortController();
     getJson<{ detections: Detection[] }>(`/api/pictures/${pictureId}`, controller.signal)
-      .then((body) => {
-        setPicture({ id: pictureId, detections: body.detections });
-        // a sign without rays: look at a box of its type
-        setSelected((s) => {
-          if (s?.pictureId !== pictureId || s.focus || !s.sign) return s;
-          const type = locatedRef.current.find((l) => l.id === s.sign)?.sign;
-          const box = body.detections.find((d) => d.sign === type);
-          return box ? { ...s, focus: box.annotationId } : s;
-        });
-      })
+      .then((body) => setPicture({ id: pictureId, detections: body.detections }))
       .catch((error) => {
         if (!controller.signal.aborted) console.warn("Could not load the picture:", error);
       });
@@ -609,17 +574,10 @@ export function SignMap() {
     () => Object.fromEntries(boxes.map((b) => [b.annotationId, b.label])),
     [boxes],
   );
-  const seen = useMemo(() => {
-    // a sign without rays: seen when near and of a type the picture detects
-    const types = new Set(detections.map((d) => d.sign));
-    return located
-      .filter((s) =>
-        s.rays.length
-          ? s.rays.some((r) => r.pictureId === pictureId)
-          : !!position && types.has(s.sign) && meters(position, s.position) <= SEEN_M,
-      )
-      .map((s) => s.id);
-  }, [located, pictureId, position, detections]);
+  const seen = useMemo(
+    () => located.filter((s) => s.rays.some((r) => r.pictureId === pictureId)).map((s) => s.id),
+    [located, pictureId],
+  );
 
   // full map <-> inset map centered on the camera of the 360° view
   useEffect(() => {

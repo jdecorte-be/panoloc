@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
       tiles: Object.fromEntries(
         [...found].map(([tile, signs]) => [
           tile,
-          signs.map(([sign, lon, lat]) => {
+          signs.map(({ sign, position, rays }) => {
             const icon = iconKey(sign, icons);
-            // push-signs keeps no rays: the pictures that see a sign are not known
-            return { sign, ...(icon && { icon }), name: (icon && icons[icon]) || sign, position: [lon, lat], rays: [] };
+            const name = (icon && icons[icon]) || sign;
+            return { sign, ...(icon && { icon }), name, position, rays };
           }),
         ]),
       ),

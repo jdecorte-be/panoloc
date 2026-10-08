@@ -51,6 +51,11 @@ export interface CountsResponse {
   counts: [number, number, number][];
 }
 
+export interface TotalResponse {
+  /** the located signs of the whole world */
+  total: number;
+}
+
 /** A sign on the map. */
 export interface LocatedSign extends Omit<TileSign, "rays"> {
   /** stable while the map moves: type and position */
