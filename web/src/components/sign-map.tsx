@@ -33,6 +33,7 @@ import type {
   Selection,
   SignRay,
   TileSign,
+  TotalResponse,
 } from "@/lib/types";
 
 // WebGL viewer: browser only
@@ -343,6 +344,7 @@ export function SignMap() {
   const [status, setStatus] = useState<MapStatus>({ kind: "loading" });
   const [located, setLocated] = useState<LocatedSign[]>([]);
   const [cameraCount, setCameraCount] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
   const [showRays, setShowRays] = useState(false);
   const [picture, setPicture] = useState<{ id: string; detections: Detection[] } | null>(null);
@@ -579,6 +581,17 @@ export function SignMap() {
     [located, pictureId],
   );
 
+  // the signs of the whole world: asked for once per page load
+  useEffect(() => {
+    const controller = new AbortController();
+    getJson<TotalResponse>("/api/total", controller.signal)
+      .then((body) => setTotal(body.total))
+      .catch((error) => {
+        if (!controller.signal.aborted) console.warn("Could not count the signs:", error);
+      });
+    return () => controller.abort();
+  }, []);
+
   // full map <-> inset map centered on the camera of the 360° view
   useEffect(() => {
     const map = mapRef.current;
@@ -680,6 +693,7 @@ export function SignMap() {
         status={status}
         located={located}
         cameras={cameraCount}
+        total={total}
         selected={selected}
         boxes={boxes}
         showRays={showRays}

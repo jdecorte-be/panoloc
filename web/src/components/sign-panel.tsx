@@ -188,6 +188,8 @@ interface SignPanelProps {
   status: MapStatus;
   located: LocatedSign[];
   cameras: number;
+  /** the signs of the whole world, once counted */
+  total: number | null;
   selected: Selection | null;
   boxes: Box[];
   showRays: boolean;
@@ -201,6 +203,7 @@ export function SignPanel({
   status,
   located,
   cameras,
+  total,
   selected,
   boxes,
   showRays,
@@ -242,6 +245,11 @@ export function SignPanel({
         that see them.
       </p>
       <StatusLine status={status} signs={located.length} cameras={cameras} />
+      {total !== null && (
+        <p className="text-muted">
+          <strong>{total.toLocaleString("en")}</strong> signs in the world
+        </p>
+      )}
       <div className={details}>
         {status.kind !== "counts" && (
           <label className="mt-2 flex items-center gap-2 text-xs">
