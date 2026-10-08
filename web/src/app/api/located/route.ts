@@ -1,75 +1,53 @@
 import type { NextRequest } from "next/server";
 
-import { ensureLocator, forgetLocator, LOCATOR } from "@/lib/locator";
 import { manifest } from "@/lib/manifest";
 import { iconKey } from "@/lib/sign-codes";
+import { signsOfTiles } from "@/lib/signs";
 import { MAX_TILES } from "@/lib/tiles";
-import type { LocatedResponse, TileSign } from "@/lib/types";
+import type { LocatedResponse } from "@/lib/types";
 
-// how long the locator holds a request for the tiles it is locating
-const WAIT_MS = 1200;
 const TILE = /^-?\d+:-?\d+$/;
 
-interface PythonSign {
-  sign: string;
-  position: [number, number];
-  rays: {
-    pictureId: string;
-    annotationId: string | null;
-    camera: [number, number];
-    bearing: number;
-    distance: number;
-  }[];
-}
-
-/** GET /api/located?tiles=i:j,i:j -> the signs of these tiles, and those still pending. */
+/** GET /api/located?tiles=i:j,i:j -> the signs of these tiles, from `make push-signs`. */
 export async function GET(request: NextRequest) {
-  const tiles = (request.nextUrl.searchParams.get("tiles") ?? "").split(",").filter(Boolean);
-  if (!tiles.length || tiles.length > MAX_TILES || !tiles.every((t) => TILE.test(t))) {
+  const names = (request.nextUrl.searchParams.get("tiles") ?? "").split(",").filter(Boolean);
+  const tiles = names.map((t) => t.split(":").map(Number) as [number, number]);
+  const span = (axis: 0 | 1) =>
+    Math.max(...tiles.map((t) => t[axis])) - Math.min(...tiles.map((t) => t[axis]));
+  if (
+    !names.length ||
+    names.length > MAX_TILES ||
+    !names.every((t) => TILE.test(t)) ||
+    // the tiles of one view: no scan of the whole collection
+    span(0) >= MAX_TILES ||
+    span(1) >= MAX_TILES
+  ) {
     return Response.json(
-      { error: `expected tiles=i:j,i:j (at most ${MAX_TILES})` },
+      { error: `expected tiles=i:j,i:j (at most ${MAX_TILES}, of one view)` },
       { status: 400 },
     );
   }
 
-  let located: { tiles: Record<string, PythonSign[]>; pending: string[] };
   try {
-    await ensureLocator();
-    const res = await fetch(`${LOCATOR}/tiles?tiles=${tiles.join(",")}&wait=${WAIT_MS}`, {
-      signal: request.signal,
-    });
-    if (!res.ok) throw new Error(`the locator answered ${res.status}`);
-    located = await res.json();
+    const [found, icons] = await Promise.all([signsOfTiles(tiles), manifest()]);
+    const body: LocatedResponse = {
+      tiles: Object.fromEntries(
+        [...found].map(([tile, signs]) => [
+          tile,
+          signs.map(([sign, lon, lat]) => {
+            const icon = iconKey(sign, icons);
+            // push-signs keeps no rays: the pictures that see a sign are not known
+            return { sign, ...(icon && { icon }), name: (icon && icons[icon]) || sign, position: [lon, lat], rays: [] };
+          }),
+        ]),
+      ),
+    };
+    return Response.json(body);
   } catch (error) {
-    if (request.signal.aborted) return new Response(null, { status: 499 });
-    forgetLocator(); // look for it again next time
     console.error("GET /api/located failed:", error);
     return Response.json(
-      { error: `Could not locate the signs: ${error instanceof Error ? error.message : error}` },
+      { error: "Could not query the signs: is SIGNS_URI (or MONGODB_URI) reachable?" },
       { status: 503 },
     );
   }
-
-  const icons = await manifest();
-  const body: LocatedResponse = {
-    tiles: Object.fromEntries(
-      Object.entries(located.tiles).map(([tile, signs]) => [
-        tile,
-        signs.map(({ sign, position, rays }): TileSign => {
-          const icon = iconKey(sign, icons);
-          return {
-            sign,
-            ...(icon && { icon }),
-            name: (icon && icons[icon]) || sign,
-            position,
-            rays: rays
-              .toSorted((a, b) => a.distance - b.distance)
-              .map((r) => [r.pictureId, r.annotationId, ...r.camera, r.bearing, r.distance]),
-          };
-        }),
-      ]),
-    ),
-    pending: located.pending,
-  };
-  return Response.json(body);
 }

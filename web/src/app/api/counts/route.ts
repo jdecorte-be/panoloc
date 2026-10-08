@@ -1,10 +1,10 @@
 import type { NextRequest } from "next/server";
 
 import { parseBbox } from "@/lib/bbox";
-import { ensureLocator, forgetLocator, LOCATOR } from "@/lib/locator";
+import { countsOf } from "@/lib/signs";
 import type { CountsResponse } from "@/lib/types";
 
-// any bbox: the locator answers from the counts it holds in memory
+// any bbox: the counts per tile are held in memory
 const MAX_SPAN_DEG = 360;
 // tiles per side of a square: 2^12 tiles is about 10° wide
 const MAX_SIZE = 4096;
@@ -20,18 +20,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await ensureLocator();
-    const res = await fetch(`${LOCATOR}/counts?bbox=${parsed.bbox.join(",")}&size=${size}`, {
-      signal: request.signal,
-    });
-    if (!res.ok) throw new Error(`the locator answered ${res.status}`);
-    return Response.json((await res.json()) as CountsResponse);
+    const body: CountsResponse = { counts: await countsOf(parsed.bbox, size) };
+    return Response.json(body);
   } catch (error) {
-    if (request.signal.aborted) return new Response(null, { status: 499 });
-    forgetLocator();
     console.error("GET /api/counts failed:", error);
     return Response.json(
-      { error: `Could not count the signs: ${error instanceof Error ? error.message : error}` },
+      { error: "Could not count the signs: is SIGNS_URI (or MONGODB_URI) reachable?" },
       { status: 503 },
     );
   }

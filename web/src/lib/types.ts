@@ -37,15 +37,13 @@ export interface TileSign {
   icon?: string;
   name: string;
   position: [number, number];
-  /** one per picture that sees it, the nearest first */
+  /** one per picture that sees it, the nearest first: none from `make push-signs` */
   rays: RayTuple[];
 }
 
 export interface LocatedResponse {
-  /** tile "i:j" -> its signs */
+  /** tile "i:j" -> its signs, for every tile asked */
   tiles: Record<string, TileSign[]>;
-  /** tiles still being located: ask again */
-  pending: string[];
 }
 
 export interface CountsResponse {

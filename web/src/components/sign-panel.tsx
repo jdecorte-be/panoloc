@@ -43,7 +43,7 @@ function StatusLine({
     <p>
       <strong>{signs}</strong> signs located from {cameras} pictures
       {status.kind === "locating" && (
-        <span className="text-muted"> · locating {status.pending} more tiles…</span>
+        <span className="text-muted"> · loading {status.pending} more tiles…</span>
       )}
     </p>
   );
@@ -112,7 +112,8 @@ function SignSection({
         {signLabel(sign.number, sign.name)}
       </h2>
       <p className="mt-1 text-xs text-muted">
-        <code>{sign.sign}</code> · seen in {sign.rays.length} pictures
+        <code>{sign.sign}</code>
+        {sign.rays.length > 0 && <> · seen in {sign.rays.length} pictures</>}
       </p>
       <ul className="mt-2 space-y-0.5">
         {rays.map((r) => (
@@ -243,7 +244,7 @@ export function SignPanel({
       </p>
       <StatusLine status={status} signs={located.length} cameras={cameras} />
       <div className={details}>
-        {status.kind !== "counts" && (
+        {status.kind !== "counts" && located.some((s) => s.rays.length) && (
           <label className="mt-2 flex items-center gap-2 text-xs">
             <input
               type="checkbox"
