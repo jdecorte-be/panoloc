@@ -2,14 +2,16 @@ import colorsys
 import math
 from collections import defaultdict
 
-from panoloc.deduplication import Cell, Group, Ray, group_label
-from panoloc.geo import local_to_lonlat
+from panoloc.deduplication import Cell, Group, Ray
+from panoloc.frontend.map_shapes import local_to_lonlat
+from panoloc.frontend.signs import sign_name
 
 ALL = "All groups (sum)"
 WINNER = "Winning group per cell"
 ONE = "One group"
 VIEWS = (ALL, WINNER, ONE)
 MAX_TOOLTIP_GROUPS = 8
+SECTORS = "NESW"  # see group_rays
 
 # one color per group when there are few groups, see group_colors
 PALETTE = [
@@ -24,6 +26,11 @@ PALETTE = [
     (188, 189, 34),
     (127, 127, 127),
 ]
+
+
+def group_label(key: Group) -> str:
+    sign_type, sector = key
+    return f"{sign_name(sign_type)}, driving {SECTORS[sector]}"
 
 
 def ray_length(r, side, max_m):

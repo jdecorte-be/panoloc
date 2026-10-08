@@ -1,10 +1,13 @@
 """Annotation drawing and display helpers: outlines on pictures, labels, tag tables."""
 
+import math
+from typing import Any
+
 from PIL import Image, ImageDraw, ImageFont
 
 from panoloc.annotations import shape_to_xy
 from panoloc.bbox import Item
-from panoloc.signs import sign_name
+from panoloc.frontend.signs import sign_name
 
 MAX_DISPLAY_WIDTH = 2000  # px; HD pictures are downscaled before drawing
 BOX_COLOR = (255, 40, 40)
@@ -64,6 +67,24 @@ def draw_annotations(
     return Image.alpha_composite(out, overlay).convert("RGB")
 
 
+def annotation_elevation(shape: Any, props: Item) -> float | None:
+    orientation: Item = props.get("pers:interior_orientation") or {}
+    fov = orientation.get("field_of_view")
+    dims = orientation.get("sensor_array_dimensions")
+
+    if not fov or not dims:
+        return None
+
+    width, height = dims
+    ys = [y for _, y in shape_to_xy(shape)]
+    dy = height / 2 - (min(ys) + max(ys)) / 2  # pixels above the image center
+
+    if fov >= 360:  # equirectangular: same degrees per pixel on both axes
+        return dy * 360 / width
+    focal_px = (width / 2) / math.tan(math.radians(fov / 2))
+    return math.degrees(math.atan(dy / focal_px))
+
+
 def sign_label(number: int | None, sign_type: str | None) -> str:
     """#n: the same sign in every picture. ?: not located (seen too few times, or untyped).
 
@@ -73,9 +94,42 @@ def sign_label(number: int | None, sign_type: str | None) -> str:
     return tag if sign_type is None else f"{tag} {sign_name(sign_type)}"
 
 
+def box_label(signs: list[tuple[int | None, str]]) -> str:
+    """[(number, sign type)] of one box -> one sign_label per sign, "?" for an untyped box."""
+    return " + ".join(sign_label(n, t) for n, t in signs) or sign_label(
+        None, None
+    )
+
+
 def distance_label(dist_m: float | None) -> str:
     """How far the sign is from the camera, empty when it is not located."""
     return "" if dist_m is None else f"{dist_m:.0f} m"
+
+
+def sign_numbers(signs):
+    """(annotation id, sign type) -> number of the sign: a box can show several signs."""
+    return {
+        (r.annotation_id, s.sign_type): s.number
+        for s in signs
+        for r in s.rays
+        if r.annotation_id
+    }
+
+
+def sign_distances(signs):
+    """annotation id -> meters from the camera to the sign it shows.
+
+    A box showing several signs gets the distance of its most seen one: they are on
+    the same post.
+    """
+    distances = {}
+    for s in signs:  # most seen first
+        for r in s.rays:
+            if r.annotation_id:
+                distances.setdefault(
+                    r.annotation_id, math.hypot(s.x - r.x, s.y - r.y)
+                )
+    return distances
 
 
 def tags_table(semantics: list[Item] | None) -> list[dict[str, str]]:

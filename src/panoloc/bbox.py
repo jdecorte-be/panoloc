@@ -8,7 +8,6 @@ import requests
 DATA_DIR = Path("data/raw")
 CHUNK_SIZE = 1 << 16  # 64 KiB per read when streaming an image
 API = "https://api.panoramax.xyz/api"
-VIEWER = "https://api.panoramax.xyz/"
 M_PER_DEG_LAT = 111_320  # meters per degree of latitude (approx.)
 TIMEOUT_S = 10
 
@@ -72,7 +71,16 @@ def ensure_image(url: str, dest: Path) -> None:
     tmp.replace(dest)  # atomic: a crash never leaves a half-written .jpg
 
 
-def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
+def fetch_image(url: str) -> bytes:
+    """Download url in memory, nothing written to disk."""
+    r = SESSION.get(url, timeout=TIMEOUT_S)
+    r.raise_for_status()
+    return r.content
+
+
+def nearby_pictures(
+    pic_id: str, radius_m: float = 10, download: bool = False
+) -> list[Item]:
     target = get_picture(pic_id)
     lon, lat = target["geometry"]["coordinates"]
     seq = target["collection"]
@@ -103,6 +111,8 @@ def nearby_pictures(pic_id: str, radius_m: float = 10) -> list[Item]:
     ]
     for p in pics:
         path = save_item(p["item"])
-        ensure_image(p["hd"], path)
-        p["jpg"] = str(path)  # local file: what the app and the algos read
+        if download:
+            ensure_image(p["hd"], path)
+        # local file if there is one (downloaded now or before), else the app reads p["hd"]
+        p["jpg"] = str(path) if path.exists() else None
     return sorted(pics, key=lambda p: p["datetime"] or "")

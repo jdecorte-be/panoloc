@@ -21,7 +21,8 @@ Precisely geolocate the objects detected in Panoramax pictures, beyond the appro
 uv run streamlit run src/panoloc/app.py
 
 # Click the LOAD button in the streamlit app
-# It will download the pictures you requested and their metadata from the Panoramax API
+# It will fetch the metadata of the pictures you requested from the Panoramax API
+# Check "Download pictures" in the sidebar to also download the HD pictures
 # The corresponding files are stored in data/raw/<sequence_id>/<picture_id>.{jpg,json}
 ```
 

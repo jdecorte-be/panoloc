@@ -2,18 +2,22 @@ import re
 
 import streamlit as st
 
-from panoloc.annotations import annotation_elevation, annotation_heading
-from panoloc.bbox import VIEWER, Item, PictureNotFound, nearby_pictures
+from panoloc.annotations import annotation_heading
+from panoloc.bbox import Item, PictureNotFound, nearby_pictures
 from panoloc.deduplication import (
     find_signs,
-    group_label,
     ray_groups,
-    sign_distances,
-    sign_numbers,
-    sign_type_of,
+    sign_types_of,
     the_ray_voting_algorithm,
 )
-from panoloc.frontend.drawing import distance_label, sign_label, tags_table
+from panoloc.frontend.drawing import (
+    annotation_elevation,
+    box_label,
+    distance_label,
+    sign_distances,
+    sign_numbers,
+    tags_table,
+)
 from panoloc.frontend.heading_map import heading_map
 from panoloc.frontend.images import pano_data_url
 from panoloc.frontend.map_shapes import (
@@ -28,6 +32,7 @@ from panoloc.frontend.votes import (
     VIEWS,
     WINNER,
     group_colors,
+    group_label,
     ray_lines,
     sorted_groups,
     vote_cells,
@@ -38,6 +43,7 @@ DEFAULT_URL = (
     "&pic=cfbce3b6-2904-41aa-9837-a3d2dffec6d5&seq=0fc301f5-a742-4405-8e6a-1c180a2121ff"
     "&speed=250&theme=default&users=default&xyz=66.88/-13.30/30"
 )
+VIEWER = "https://api.panoramax.xyz/"
 INFO_COLOR = "#4fa8ff"  # light blue, readable on light and dark themes
 UUID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
@@ -80,9 +86,12 @@ def load_from_url() -> None:
         st.session_state.url_error = "No picture id found in this URL."
         return
     radius = st.session_state.radius
+    download = st.session_state.download
     try:
-        with st.spinner("Downloading pictures..."):
-            pics = nearby_pictures(pic_id, radius)
+        with st.spinner(
+            "Downloading pictures..." if download else "Searching pictures..."
+        ):
+            pics = nearby_pictures(pic_id, radius, download)
     except PictureNotFound:
         st.session_state.url_error = f"Picture not found: {pic_id}"
         return
@@ -123,6 +132,12 @@ def main() -> None:
         value=50,
         step=5,
         key="radius",
+    )
+    st.sidebar.checkbox(
+        "Download pictures",
+        value=False,
+        key="download",
+        help="Save the HD pictures to data/raw on Load. Off: only the shown one is fetched.",
     )
     cell = st.sidebar.number_input(
         "Grid cell (m)", min_value=0.1, max_value=100.0, value=0.5, step=0.1
@@ -171,7 +186,9 @@ def main() -> None:
     numbers = sign_numbers(signs)
     distances = sign_distances(signs)
     labels = tuple(
-        sign_label(numbers.get(a.get("id")), sign_type_of(a))
+        box_label(
+            [(numbers.get((a.get("id"), t)), t) for t in sign_types_of(a)]
+        )
         for a in annotations
     )
     # under each box of the 360° view: how far the sign is from the camera
@@ -204,16 +221,17 @@ def main() -> None:
     left, right = st.columns([3, 2])
 
     with left:
+        src = pic["jpg"] or pic["hd"]  # not downloaded: fetched from Panoramax
         try:
             with st.spinner("Loading 360° view..."):
-                pano = pano_data_url(pic["jpg"], annotations, labels, below)
+                pano = pano_data_url(src, annotations, labels, below)
             panorama(
                 data=panorama_config(pano, props, move_targets(items, item)),
                 key="pano",
                 on_move_change=move_from_pano,
             )
         except Exception as e:  # noqa: BLE001 - shown in the page, not a crash
-            st.warning(f"Could not load {pic['jpg']}: {e}")
+            st.warning(f"Could not load {src}: {e}")
         st.pydeck_chart(
             heading_map(
                 items,

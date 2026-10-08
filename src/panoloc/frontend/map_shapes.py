@@ -5,7 +5,6 @@ import math
 from panoloc.bbox import M_PER_DEG_LAT, bbox_around
 from panoloc.deduplication import Sign
 from panoloc.frontend.drawing import sign_label
-from panoloc.geo import local_to_lonlat
 
 
 def offset(
@@ -16,6 +15,16 @@ def offset(
     dlat = dist_m * math.cos(a) / M_PER_DEG_LAT
     dlon = dist_m * math.sin(a) / (M_PER_DEG_LAT * math.cos(math.radians(lat)))
     return [lon + dlon, lat + dlat]
+
+
+def local_to_lonlat(
+    lon: float, lat: float, radius_m: float, x: float, y: float
+) -> list[float]:
+    m_per_deg_lon = M_PER_DEG_LAT * math.cos(math.radians(lat))
+    return [
+        lon + (x - radius_m) / m_per_deg_lon,
+        lat + (y - radius_m) / M_PER_DEG_LAT,
+    ]
 
 
 def bbox_ring(lon: float, lat: float, radius_m: float) -> list[list[float]]:
