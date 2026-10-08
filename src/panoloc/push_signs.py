@@ -24,7 +24,14 @@ from pymongo.errors import BulkWriteError, PyMongoError
 from tqdm import tqdm
 
 from panoloc.bbox import Item
-from panoloc.locate import CELL_M, MAX_DIST_M, Locator, locate_chunks, seen_tiles
+from panoloc.locate import (
+    CELL_M,
+    MAX_DIST_M,
+    Locator,
+    add_worker_args,
+    locate_chunks,
+    seen_tiles,
+)
 
 DATABASE = "panoloc"
 COLLECTION = "signs"
@@ -69,9 +76,7 @@ def main() -> None:
     parser.add_argument("--uri", default=os.environ.get("SIGNS_URI"))
     parser.add_argument("--db", default=DATABASE)
     parser.add_argument("--collection", default=COLLECTION)
-    parser.add_argument(
-        "--workers", type=int, help="processes locating tiles (default: one per CPU)"
-    )
+    add_worker_args(parser)
     args = parser.parse_args()
     if not args.uri:
         parser.error("the target MongoDB: --uri or SIGNS_URI")
@@ -81,7 +86,7 @@ def main() -> None:
     retried(staging.drop, "dropping the staging")  # left by a stopped run
 
     tiles = seen_tiles(MAX_DIST_M)
-    locator = Locator(args.workers, max_waiting=math.inf)
+    locator = Locator(args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem)
     pushed = located = 0
     try:
         for found in locate_chunks(locator, tiles, CELL_M, MAX_DIST_M):

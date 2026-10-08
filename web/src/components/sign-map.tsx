@@ -8,6 +8,7 @@ import maplibregl, {
   type GeoJSONSource,
   type MapGeoJSONFeature,
   type Map as MapLibreMap,
+  type StyleSpecification,
 } from "maplibre-gl";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -41,8 +42,22 @@ const Panorama = dynamic(() => import("@/components/panorama").then((m) => m.Pan
   ssr: false,
 });
 
-// free vector basemap, no API key
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+// the standard OpenStreetMap tiles, no API key; the fonts of the labels from OpenFreeMap
+const STYLE: StyleSpecification = {
+  version: 8,
+  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    },
+  },
+  layers: [{ id: "osm", type: "raster", source: "osm" }],
+};
 // Strasbourg, the default picture of the Streamlit app
 const INITIAL_CENTER: [number, number] = [7.741354, 48.589898];
 const INITIAL_ZOOM = 17;
@@ -458,7 +473,7 @@ export function SignMap() {
     if (!container.current) return;
     const map = new maplibregl.Map({
       container: container.current,
-      style: STYLE_URL,
+      style: STYLE,
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       hash: true, // the view is kept in the URL: #zoom/lat/lon

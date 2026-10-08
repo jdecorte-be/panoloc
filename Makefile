@@ -18,8 +18,10 @@ FROM_ROW     ?= 0
 TO_ROW       ?=
 # times a failed batch is retried before it is skipped
 RETRIES      ?= 2
-# processes locating the tiles of `make locate` and `make push-signs` (empty: one per CPU)
+# processes locating the tiles of `make locate` and `make push-signs` (empty: one per CPU, as many as fit in memory)
 WORKERS      ?=
+# GB of memory one of those processes may use: a tile needing more is given up, listed as failed
+WORKER_MEM   ?=
 # times `make locate` and `make push-signs` start again after a crash: they go on from the cache
 RESTARTS     ?= 20
 
@@ -106,10 +108,10 @@ db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(INDEXES_JS)
 
 locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, hours for the world)
-	$(call restarting,uv run python -m panoloc.locate $(if $(WORKERS),--workers $(WORKERS)))
+	$(call restarting,uv run python -m panoloc.locate $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)))
 
 push-signs: ## Locate the signs of every picture and replace the ones of SIGNS_URI with their type, position and rays
-	$(call restarting,uv run python -m panoloc.push_signs $(if $(WORKERS),--workers $(WORKERS)))
+	$(call restarting,uv run python -m panoloc.push_signs $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)))
 
 web-install: ## Install the web app dependencies
 	pnpm --dir web install

@@ -22,6 +22,7 @@ import math
 import multiprocessing
 import os
 import re
+import resource
 import signal
 import sys
 import threading
@@ -56,6 +57,12 @@ CHUNK_TILES = 2000
 # times a tile is located before it is given up: a worker that crashes (out of
 # memory...) takes the tiles of the others with it, located again in a new pool
 MAX_ATTEMPTS = 3
+# memory a worker may use: a tile needing more fails (MemoryError) instead of the
+# whole machine running out of memory; its busiest tiles take several GB
+WORKER_MEM_GB = 3.0
+# memory left to the rest of the machine when choosing the number of workers
+RESERVED_MEM_GB = 4.0
+GB = 1 << 30
 
 Tile = tuple[int, int]
 # a tile and the parameters it is located with
@@ -189,8 +196,33 @@ def locate_tile(key: Key) -> tuple[str, list[Item]]:
     return fingerprint(), signs
 
 
-def _exit_with(parent: int) -> None:
-    """Worker initializer: exit when the server is gone, even killed (-9)."""
+def available_memory() -> int | None:
+    """Bytes the kernel can give without swapping, None if unknown."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return None
+
+
+def default_workers(worker_mem_gb: float) -> int:
+    """One per CPU, as many as fit in the memory available at worker_mem_gb each."""
+    workers = os.cpu_count() or 1
+    if (available := available_memory()) is not None:
+        fit = (available - RESERVED_MEM_GB * GB) // (worker_mem_gb * GB)
+        workers = min(workers, max(1, int(fit)))
+    return workers
+
+
+def _init_worker(parent: int, mem_bytes: int) -> None:
+    """Worker initializer: cap its memory, and exit when the server is gone,
+    even killed (-9)."""
+    # RLIMIT_DATA, not RLIMIT_AS: the address space reserved (malloc arenas,
+    # shared libraries) does not count, only the memory written to
+    resource.setrlimit(resource.RLIMIT_DATA, (mem_bytes, mem_bytes))
 
     def watch() -> None:
         while os.getppid() == parent:
@@ -204,9 +236,17 @@ class Locator:
     """Locates tiles in a pool of processes, the last asked first, into the cache."""
 
     def __init__(
-        self, workers: int | None = None, max_waiting: float = MAX_WAITING
+        self,
+        workers: int | None = None,
+        max_waiting: float = MAX_WAITING,
+        worker_mem_gb: float = WORKER_MEM_GB,
     ) -> None:
-        self.workers = workers or os.cpu_count() or 1
+        self.workers = workers or default_workers(worker_mem_gb)
+        self.worker_mem_gb = worker_mem_gb
+        print(
+            f"{self.workers} workers, {worker_mem_gb:g} GB of memory each at most",
+            file=sys.stderr,
+        )
         self.max_waiting = max_waiting
         self.cache = pictures().database[CACHE]
         self.changed = threading.Condition()  # guards the fields below
@@ -326,8 +366,8 @@ class Locator:
                 self.pool = ProcessPoolExecutor(
                     self.workers,
                     mp_context=multiprocessing.get_context("spawn"),
-                    initializer=_exit_with,
-                    initargs=(os.getpid(),),
+                    initializer=_init_worker,
+                    initargs=(os.getpid(), int(self.worker_mem_gb * GB)),
                 )
                 self.pool_fingerprint = current
                 # after: the tiles it cancels come back here, for the new pool
@@ -356,6 +396,15 @@ class Locator:
             done = True
         except CancelledError:
             retry = True  # by a new pool, for edited code: not the tile's fault
+        except MemoryError:
+            # it would need as much again: given up at once
+            tqdm.write(
+                f"tile {tile_id(*key)} failed: over {self.worker_mem_gb:g} GB "
+                "of memory (--worker-mem)",
+                file=sys.stderr,
+            )
+            self.failed.add(key)
+            done = True
         except Exception as e:  # noqa: BLE001 - one tile, the others go on
             attempts = self.attempts.get(key, 0) + 1
             retry = attempts < MAX_ATTEMPTS
@@ -441,8 +490,10 @@ def locate_chunks(
         locator.on_done = None
 
 
-def serve(port: int, workers: int | None = None) -> None:
-    locator = Locator(workers)
+def serve(
+    port: int, workers: int | None = None, worker_mem_gb: float = WORKER_MEM_GB
+) -> None:
+    locator = Locator(workers, worker_mem_gb=worker_mem_gb)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -513,6 +564,20 @@ def serve(port: int, workers: int | None = None) -> None:
     server.serve_forever()
 
 
+def add_worker_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--workers",
+        type=int,
+        help="processes locating tiles (default: one per CPU, as many as fit in memory)",
+    )
+    parser.add_argument(
+        "--worker-mem",
+        type=float,
+        default=WORKER_MEM_GB,
+        help=f"GB of memory a worker may use (default: {WORKER_MEM_GB:g})",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
@@ -523,19 +588,17 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--cell", type=float, default=CELL_M)
     parser.add_argument("--max-dist", type=float, default=MAX_DIST_M)
-    parser.add_argument(
-        "--workers", type=int, help="processes locating tiles (default: one per CPU)"
-    )
+    add_worker_args(parser)
     args = parser.parse_args()
     if args.target == "serve":
-        serve(args.port, args.workers)
+        serve(args.port, args.workers, args.worker_mem)
         return
     if args.target:
         west, south, east, north = (float(v) for v in args.target.split(","))
         tiles = tiles_of(west, south, east, north)
     else:
         tiles = seen_tiles(args.max_dist)
-    locator = Locator(args.workers, max_waiting=math.inf)
+    locator = Locator(args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem)
     signs = located = 0
     for found in locate_chunks(locator, tiles, args.cell, args.max_dist):
         signs += sum(map(len, found.values()))

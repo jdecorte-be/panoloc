@@ -64,4 +64,4 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `src/lib/sign-images.ts` | Rasterizes the SVG pictograms for MapLibre |
 | `scripts/copy-signs.mjs` | Copies `src/panoloc/frontend/assets/signs` to `public/signs` before `dev` / `build` |
 
-The basemap is [OpenFreeMap](https://openfreemap.org/) (no API key).
+The basemap is the standard [OpenStreetMap](https://www.openstreetmap.org/) tiles (no API key), the label fonts from [OpenFreeMap](https://openfreemap.org/).
