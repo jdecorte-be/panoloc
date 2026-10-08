@@ -1,21 +1,21 @@
 import pydeck as pdk
 
 from panoloc.bbox import Item
-from panoloc.geo import offset
+from panoloc.frontend.map_shapes import offset
 
 # length of the heading
 HEADING_LENGTH_M = 30
 
 
 def heat_color(vmax: float) -> str:
-    """deck.gl color expression: green for 0, shifting to red as value approaches vmax.
+    """deck.gl color expression: transparent for 0, dark gray shifting to red as value approaches vmax.
 
     Cells with an rgb (winning group view) take that color, more opaque as value grows.
     """
     t = f"value / {vmax}" if vmax > 0 else "0"
     return (
-        f"rgb ? [rgb[0], rgb[1], rgb[2], 40 + 180 * {t}]"
-        f" : [220 * {t}, 200 * (1 - {t}), 0, 90]"
+        f"rgb ? [rgb[0], rgb[1], rgb[2], 80 + 160 * {t}]"
+        f" : [60 + 160 * {t}, 60 * (1 - {t}), 60 * (1 - {t}), value > 0 ? 160 : 0]"
     )
 
 
@@ -28,8 +28,10 @@ def heading_map(
     cells: list[dict[str, object]],
     show_numbers: bool = False,
     rays: list[dict[str, object]] | None = None,
+    signs: list[dict[str, object]] | None = None,
 ) -> pdk.Deck:
-    """cells: votes.vote_cells output; rays: votes.ray_lines output (None: hidden)."""
+    """cells: votes.vote_cells output; rays: votes.ray_lines output (None: hidden);
+    signs: map_shapes.sign_markers output (None: hidden)."""
     vmax = max((c["value"] for c in cells), default=0)
     # label at the center of each non-zero cell
     labels = [
@@ -75,7 +77,7 @@ def heading_map(
             data=grid,
             get_source_position="from",
             get_target_position="to",
-            get_color=[40, 120, 230, 60],
+            get_color=[40, 120, 230, 30],
             get_width=1,
         ),
         pdk.Layer(
@@ -126,7 +128,38 @@ def heading_map(
                 get_width=1,
             )
         )
+    if signs:
+        layers += [
+            pdk.Layer(
+                "ScatterplotLayer",
+                id="signs",
+                data=signs,
+                pickable=True,  # hover a sign to see its type
+                get_position="pos",
+                get_radius=0.6,
+                # orange like the boxes of the 360° view: the signs this picture shows
+                get_fill_color="current ? [255, 140, 0] : [255, 255, 255]",
+                get_line_color=[0, 0, 0],
+                stroked=True,
+                line_width_min_pixels=1,
+                radius_min_pixels=5,
+            ),
+            pdk.Layer(
+                "TextLayer",
+                id="sign_labels",
+                data=signs,
+                pickable=True,  # the #n label too, else its hover shows the cell below
+                get_position="pos",
+                get_text="text",
+                get_size=13,
+                get_color=[20, 20, 20],
+                get_pixel_offset=[0, -16],
+                background=True,
+                get_background_color=[255, 255, 255, 210],
+            ),
+        ]
     view = pdk.ViewState(longitude=lon, latitude=lat, zoom=17)
-    return pdk.Deck(
-        layers=layers, initial_view_state=view, tooltip={"html": "{info}"}
-    )
+    # Streamlit puts deck.gl's widget root under the map instead of over it, which
+    # draws the tooltip one map height above the cursor: top 100% moves it back
+    tooltip = {"text": "{info}", "style": {"top": "100%"}}
+    return pdk.Deck(layers=layers, initial_view_state=view, tooltip=tooltip)

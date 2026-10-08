@@ -1,21 +1,19 @@
-"""Turn the ray voting groups into map data: cell colors, hover text and the voting rays.
-
-Pure helpers (no Streamlit inside, easy to test).
-"""
-
+import colorsys
 import math
 from collections import defaultdict
 
-from panoloc.deduplication import Cell, Group, Ray, group_label
-from panoloc.geo import local_to_lonlat
+from panoloc.deduplication import Cell, Group, Ray
+from panoloc.frontend.map_shapes import local_to_lonlat
+from panoloc.frontend.signs import sign_name
 
 ALL = "All groups (sum)"
 WINNER = "Winning group per cell"
 ONE = "One group"
 VIEWS = (ALL, WINNER, ONE)
 MAX_TOOLTIP_GROUPS = 8
+SECTORS = "NESW"  # see group_rays
 
-# one color per group, cycled when there are more groups than colors
+# one color per group when there are few groups, see group_colors
 PALETTE = [
     (31, 119, 180),
     (255, 127, 14),
@@ -30,7 +28,12 @@ PALETTE = [
 ]
 
 
-def ray_length(r, side):
+def group_label(key: Group) -> str:
+    sign_type, sector = key
+    return f"{sign_name(sign_type)}, driving {SECTORS[sector]}"
+
+
+def ray_length(r, side, max_m):
     dx = math.sin(math.radians(r.bearing))
     dy = math.cos(math.radians(r.bearing))
     ts = []
@@ -39,11 +42,23 @@ def ray_length(r, side):
             ts.append((side - max(r.size, p)) / d)
         elif d < -1e-12:
             ts.append(-min(r.size, p) / d)
-    return max(0.0, min(ts, default=0.0))
+    return max(0.0, min(ts + [max_m]))
+
+
+def distinct_color(i: int) -> tuple[int, int, int]:
+    hue = (i * 0.618033988749895) % 1
+    sat = (0.85, 0.55, 0.95)[i % 3]
+    val = (0.9, 0.65, 0.75, 0.5)[i % 4]
+    r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
+
+    return round(r * 255), round(g * 255), round(b * 255)
 
 
 def group_colors(keys: list[Group]) -> dict[Group, tuple[int, int, int]]:
-    return {key: PALETTE[i % len(PALETTE)] for i, key in enumerate(keys)}
+    """A different color for every group."""
+    if len(keys) <= len(PALETTE):
+        return dict(zip(keys, PALETTE))
+    return {key: distinct_color(i) for i, key in enumerate(keys)}
 
 
 def sorted_groups(groups: dict[Group, list[Ray]]) -> list[Group]:
@@ -60,7 +75,7 @@ def vote_cells(
 ) -> list[dict[str, object]]:
     """Fill grid_cells (no heat yet) with the value, color and hover text of the chosen view.
 
-    cells must come from geo.grid_cells, in its (column, row) order.
+    cells must come from map_shapes.grid_cells, in its (column, row) order.
     """
     n = round(len(cells) ** 0.5)
     shown = (
@@ -83,12 +98,12 @@ def vote_cells(
         else:
             winner, value, rgb = None, sum(votes.values()), None
         ranked = sorted(votes.items(), key=lambda kv: -kv[1])
-        info = "<br>".join(
+        info = "\n".join(
             f"{group_label(g)}: {v:.1f}"
             for g, v in ranked[:MAX_TOOLTIP_GROUPS]
         )
         if len(ranked) > MAX_TOOLTIP_GROUPS:
-            info += f"<br>+{len(ranked) - MAX_TOOLTIP_GROUPS} more"
+            info += f"\n+{len(ranked) - MAX_TOOLTIP_GROUPS} more"
         out.append(
             {**cell, "value": value, "rgb": rgb, "info": info or "no vote"}
         )
@@ -101,16 +116,17 @@ def ray_lines(
     lon: float,
     lat: float,
     radius_m: float,
+    max_m: float,
     only: Group | None = None,
 ) -> list[dict[str, object]]:
-    """One line per voting ray, from its camera to where it leaves the bbox."""
+    """One line per voting ray, from its camera to max_m or where it leaves the bbox."""
     side = 2 * radius_m
     lines = []
     for key, rays in groups.items():
         if only is not None and key != only:
             continue
         for r in rays:
-            d = ray_length(r, side)
+            d = ray_length(r, side, max_m)
             a = math.radians(r.bearing)
             end = (r.x + d * math.sin(a), r.y + d * math.cos(a))
             lines.append(
@@ -118,7 +134,7 @@ def ray_lines(
                     "from": local_to_lonlat(lon, lat, radius_m, r.x, r.y),
                     "to": local_to_lonlat(lon, lat, radius_m, *end),
                     "color": [*colors[key], 160],
-                    "info": f"{group_label(key)}<br>bearing {r.bearing:.0f}°",
+                    "info": f"{group_label(key)}\nbearing {r.bearing:.0f}°, travel {r.azimuth:.0f}°",
                 }
             )
     return lines
