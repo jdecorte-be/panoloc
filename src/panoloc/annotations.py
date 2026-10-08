@@ -31,7 +31,8 @@ def annotation_heading(shape: Any, props: Item) -> float | None:
     ] - 0.5  # -0.5 (left edge) .. 0.5 (right edge)
     if fov >= 360:  # equirectangular: angle is linear in x
         delta = u * 360
-    else:  # pinhole camera: angle grows as atan of the distance from the center
+    # pinhole camera: angle grows as atan of the distance from the center
+    else:
         delta = math.degrees(
             math.atan(2 * u * math.tan(math.radians(fov / 2)))
         )

@@ -1,7 +1,7 @@
-from math import cos, pi, sin
+from math import cos, pi, radians, sin
 
 from .errors import ImpossibleTriangleError, PrecisionError, TriangulationError
-from .utils import Node, Point, rad
+from .utils import Node, Point
 
 
 def _get_quadrant(rad: float) -> int:
@@ -57,17 +57,14 @@ def triangulate(
     Returns:
         The target coordinates.
     """
-
-    # angle_a based on b because taking clockwise rotation
-    # but trigonometry take reverse clockwise rotation
     if abs(ra - rb) == 180:
         raise PrecisionError("points look at perfectly opposed directions.")
-    angle_a = rad(90 - ra)
+    angle_a = radians(90 - ra)
     dxa = cos(angle_a)
     dya = sin(angle_a)
     quadrant_a = _get_quadrant(angle_a)
 
-    angle_b = rad(90 - rb)
+    angle_b = radians(90 - rb)
     dxb = cos(angle_b)
     dyb = sin(angle_b)
     quadrant_b = _get_quadrant(angle_b)

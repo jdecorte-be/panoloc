@@ -11,10 +11,12 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "depth-pro",
     "pillow>=12.3.0",
     "pydeck>=0.9.3",
     "pymongo>=4.18.2",
     "requests>=2.34.2",
+    "scipy>=1.17.1",
     "streamlit>=1.65.0",
     "watchdog>=6.0.0",
 ]
@@ -24,6 +26,9 @@ dev = [
     "hypothesis>=6.168.5",
     "pytest>=9.1.1",
 ]
+
+[tool.uv.sources]
+depth-pro = { git = "https://github.com/apple-aiml-research/ml-depth-pro.git" }
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]

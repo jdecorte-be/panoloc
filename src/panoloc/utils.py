@@ -1,4 +1,3 @@
-from math import pi
 from typing import NamedTuple
 
 
@@ -25,15 +24,3 @@ class Node(NamedTuple):
 
     coordinate: Point
     rotation: float
-
-
-def rad(degrees: float) -> float:
-    """Convert degrees to radians
-
-    Args:
-        degrees: The degrees.
-
-    Returns:
-        The degrees as radians.
-    """
-    return degrees * pi / 180
