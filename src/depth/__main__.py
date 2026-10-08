@@ -1,3 +1,6 @@
-from . import main
+import sys
 
-main()
+from . import DepthEstimator
+
+depth = DepthEstimator(verbose=True)
+depth.from_id(sys.argv[1])
