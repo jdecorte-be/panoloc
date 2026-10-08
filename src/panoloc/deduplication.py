@@ -46,7 +46,7 @@ class Ray:
     annotation_id: str | None
     width: float | None
 
-    # opt1: this is a rough ditance estime
+    # opt1: this is a rough distance estime
     window: tuple[float, float] = (0.0, math.inf)
 
 
@@ -73,7 +73,6 @@ def sign_types_of(annot: Item) -> list[str]:
     )
 
 
-# ? to fix watching the north
 def travel_azimuths(items: list[Item]) -> dict[str, float]:
     """
     Args:
@@ -297,6 +296,7 @@ def weighted_median(values: list[tuple[float, float]]) -> float:
         total += w
         if total >= half:
             return v
+    return 0
 
 
 def sign_position(rays: list[Ray], x: float, y: float) -> tuple[float, float]:
@@ -310,8 +310,10 @@ def sign_position(rays: list[Ray], x: float, y: float) -> tuple[float, float]:
     if not scores:  # the rays never cross in front of both cameras
         return x, y
 
-    # TODO!!!: the median, not the best score: noisy rays never cross twice at the exact same
-    # So I think that point so every crossing ties, and two nearly parallel rays cross far away
+    # TODO: the median, not the best score:
+    # noisy rays never cross twice at the exact same
+    # So I think that point so every crossing ties,
+    # and two nearly parallel rays cross far away
     return (
         weighted_median([(pt.x, score) for pt, score in scores.items()]),
         weighted_median([(pt.y, score) for pt, score in scores.items()]),
@@ -329,7 +331,7 @@ def view_span(rays: list[Ray], x: float, y: float) -> float:
 def nearest_per_picture(
     rays: list[Ray], candidates: list[int], x: float, y: float
 ) -> list[int]:
-    closest = {}
+    closest: dict[str, int] = {}
     for i in sorted(candidates, key=lambda i: offset(rays[i], x, y)[0]):
         closest.setdefault(rays[i].photo_id, i)
     return sorted(closest.values())
@@ -354,11 +356,13 @@ def locate_signs(
         if n < SIGN_MIN_RAYS:
             break
         x, y = (cell[0] + 0.5) * cell_m, (cell[1] + 0.5) * cell_m
+        members: list[int] = []
 
         # 2nd pass from where the rays cross: more precise than the cell, so it
         # also gets the rays passing a bit too far from the cell center
         for _ in range(2):
-            # the rays crossing the cell always join: the loop moves on even with big cells
+            # the rays crossing the cell always join:
+            # the loop moves on even with big cells
             near = [
                 i
                 for i in left
@@ -367,12 +371,14 @@ def locate_signs(
 
             members = nearest_per_picture(rays, near, x, y)
 
-            # the cell counts rays, a sign counts pictures: two boxes of one picture are one
+            # the cell counts rays, a sign counts pictures:
+            # two boxes of one picture are one
             if len(members) < SIGN_MIN_RAYS:
                 break
             x, y = sign_position([rays[i] for i in members], x, y)
 
-        # too few pictures, or pictures from nearly the same direction, can't place a sign
+        # too few pictures, or pictures from nearly the same direction,
+        # can't place a sign
         if (
             len(members) < SIGN_MIN_RAYS
             or view_span([rays[i] for i in members], x, y) < SIGN_MIN_SPAN_DEG
@@ -419,7 +425,8 @@ def find_signs(
                 and all(o.photo_id != r.photo_id for o in s.rays)
             ]
 
-            # pointing at 2 signs of its type (lined up, seen from far), it could be either
+            # pointing at 2 signs of its type (lined up, seen from far),
+            # it could be either
             if len(near) == 1:
                 near[0].rays.append(r)
         signs += found

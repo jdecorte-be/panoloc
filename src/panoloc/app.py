@@ -181,7 +181,8 @@ def main() -> None:
     center, radius = st.session_state.search
     groups = ray_groups(items, *center, radius)
     heats = the_ray_voting_algorithm(items, *center, radius, cell, max_dist)
-    # numbered over all the pictures: a sign keeps its number from one picture to the next
+    # numbered over all the pictures:
+    # a sign keeps its number from one picture to the next
     signs = find_signs(items, *center, radius, cell, max_dist)
     numbers = sign_numbers(signs)
     distances = sign_distances(signs)
