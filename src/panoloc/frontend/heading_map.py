@@ -1,10 +1,13 @@
 import pydeck as pdk
 
 from panoloc.bbox import Item
-from panoloc.frontend.map_shapes import offset
+from panoloc.frontend.map_shapes import SIGN_ICON_PX, offset
 
 # length of the heading
 HEADING_LENGTH_M = 30
+# radius of the disc behind a sign pictogram
+SIGN_DISC_PX = SIGN_ICON_PX // 2 + 3
+SIGN_DOT_PX = 5  # radius of the dot of a sign without pictogram
 
 
 def heat_color(vmax: float) -> str:
@@ -19,6 +22,21 @@ def heat_color(vmax: float) -> str:
     )
 
 
+def heat_rgba(
+    value: float, vmax: float, rgb: tuple[int, int, int] | None
+) -> tuple[int, int, int, int]:
+    """heat_color in Python, for the cells drawn as an image (votes.vote_image)."""
+    t = value / vmax if vmax > 0 else 0
+    if rgb:
+        return (*rgb, round(80 + 160 * t))
+    return (
+        round(60 + 160 * t),
+        round(60 * (1 - t)),
+        round(60 * (1 - t)),
+        160 if value > 0 else 0,
+    )
+
+
 # draw the heading
 def heading_map(
     items: list[Item],
@@ -29,9 +47,11 @@ def heading_map(
     show_numbers: bool = False,
     rays: list[dict[str, object]] | None = None,
     signs: list[dict[str, object]] | None = None,
+    image: dict[str, object] | None = None,
 ) -> pdk.Deck:
     """cells: votes.vote_cells output; rays: votes.ray_lines output (None: hidden);
-    signs: map_shapes.sign_markers output (None: hidden)."""
+    signs: map_shapes.sign_markers output (None: hidden);
+    image: votes.vote_image output, the cells drawn as one picture (None: no image)."""
     vmax = max((c["value"] for c in cells), default=0)
     # label at the center of each non-zero cell
     labels = [
@@ -72,6 +92,23 @@ def heading_map(
             get_fill_color=heat_color(vmax),
             stroked=False,
         ),
+    ]
+    if image:
+        layers.append(
+            pdk.Layer(
+                "BitmapLayer",
+                id="cells_image",
+                # quoted: pydeck would turn the data URL into a JS expression
+                image=f"'{image['image']}'",
+                bounds=image["bounds"],
+                # one pixel per cell: sharp squares when zoomed in, not a blur
+                texture_parameters={
+                    "minFilter": "nearest",
+                    "magFilter": "nearest",
+                },
+            )
+        )
+    layers += [
         pdk.Layer(
             "LineLayer",
             data=grid,
@@ -136,13 +173,22 @@ def heading_map(
                 data=signs,
                 pickable=True,  # hover a sign to see its type
                 get_position="pos",
-                get_radius=0.6,
+                # a disc behind each pictogram (readable on the heatmap), a dot without
+                get_radius=f"icon ? {SIGN_DISC_PX} : {SIGN_DOT_PX}",
+                # quoted: pydeck turns the other strings into JS expressions
+                radius_units="'pixels'",
                 # orange like the boxes of the 360° view: the signs this picture shows
                 get_fill_color="current ? [255, 140, 0] : [255, 255, 255]",
-                get_line_color=[0, 0, 0],
-                stroked=True,
-                line_width_min_pixels=1,
-                radius_min_pixels=5,
+            ),
+            pdk.Layer(
+                "IconLayer",
+                id="sign_icons",
+                data=[s for s in signs if s["icon"]],
+                pickable=True,
+                get_position="pos",
+                get_icon="icon",
+                get_size="size",
+                size_units="'pixels'",
             ),
             pdk.Layer(
                 "TextLayer",
@@ -153,7 +199,7 @@ def heading_map(
                 get_text="text",
                 get_size=13,
                 get_color=[20, 20, 20],
-                get_pixel_offset=[0, -16],
+                get_pixel_offset=f"[0, icon ? {-SIGN_DISC_PX - 10} : -16]",
                 background=True,
                 get_background_color=[255, 255, 255, 210],
             ),

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 15.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="727px" height="926px" viewBox="-0.5 -0.5 727 926" enable-background="new -0.5 -0.5 727 926"
+	 xml:space="preserve">
+<defs>
+</defs>
+<path fill="#FFFFFF" stroke="#000000" stroke-width="3" d="M724.5,911.718c0,6.506-5.418,11.782-12.101,11.782H13.601
+	c-6.683,0-12.101-5.276-12.101-11.782V13.282C1.5,6.776,6.917,1.5,13.601,1.5h698.799c6.683,0,12.101,5.276,12.101,11.782V911.718z"
+	/>
+<rect x="249.5" y="58.5" fill="#DFA800" stroke="#000000" width="227" height="228"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M472.833,48.087
+	c0.676,0,1.341,0.051,1.991,0.147"/>
+<path d="M486.891,68.177l-0.391-6.09c0-7.04-5.072-12.865-11.676-13.853L252.5,48.167l-2.787-0.208
+	c-5.85,1.241-10.332,6.313-10.833,12.542l-0.671,3.357L226,293l270,0.5L486.891,68.177z M467.833,275.501h-210V66.167h210V275.501z"
+	/>
+<line fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" x1="486.5" y1="58.5" x2="486.54" y2="59.501"/>
+<rect x="209" y="310.5" width="305" height="22.5"/>
+<path d="M482.5,358h-23c-6.627,0-12,5.373-12,12v8H433v20.5h-55.37c-2.998-6.505-9.308-11-16.63-11c-7.322,0-13.632,4.495-16.63,11
+	H288.5V379h-14v-8c0-6.627-5.373-12-12-12h-23c-6.627,0-12,5.373-12,12v70.5c0,6.627,5.373,12,12,12h23c6.627,0,12-5.373,12-12v-8
+	h14V414h55.249c2.671,7.307,9.377,12.5,17.251,12.5c7.873,0,14.58-5.193,17.251-12.5H433v18.5h14.5v8c0,6.627,5.373,12,12,12h23
+	c6.627,0,12-5.373,12-12V370C494.5,363.373,489.127,358,482.5,358z"/>
+<ellipse fill="#0000FF" stroke="#0000FF" cx="359.5" cy="691" rx="189.5" ry="188"/>
+<path fill="#FFFFFF" d="M415.834,549.833h-44.667L422.863,603H347.5v0.532c-41.57,0.666-75.236,34.358-76.897,76.468H270.5v140.5h37
+	v-138h0.001c0-0.014-0.001-0.027-0.001-0.041c0-23.334,17.798-42.316,40-43.008v0.049h76.418l-53.084,52.333h46l66.333-71.333
+	L415.834,549.833z"/>
+</svg>

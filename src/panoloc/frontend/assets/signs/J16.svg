@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 13.0.0, SVG Export Plug-In  -->
+
+<svg
+   version="1.1"
+   x="0px"
+   y="0px"
+   width="222.6436"
+   height="1371.8848"
+   viewBox="-0.457 -0.94 222.6436 1371.8847"
+   enable-background="new -0.457 -0.94 128 761"
+   xml:space="preserve"
+   id="svg9310"
+   sodipodi:docname="K5B.svg"
+   inkscape:version="1.2.2 (732a01da63, 2022-12-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+   id="namedview9312"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   showgrid="false"
+   inkscape:zoom="1.0906702"
+   inkscape:cx="-100.85542"
+   inkscape:cy="39.883735"
+   inkscape:window-width="1920"
+   inkscape:window-height="991"
+   inkscape:window-x="-9"
+   inkscape:window-y="-9"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg9310" />
+<defs
+   id="defs9291"><linearGradient
+   inkscape:collect="always"
+   id="linearGradient14625"><stop
+     style="stop-color:#737373;stop-opacity:1;"
+     offset="0"
+     id="stop14621" /><stop
+     style="stop-color:#d9d9d9;stop-opacity:1;"
+     offset="0.13184932"
+     id="stop14633" /><stop
+     style="stop-color:#f8f8f8;stop-opacity:1;"
+     offset="0.5291096"
+     id="stop14629" /><stop
+     style="stop-color:#d9d9d9;stop-opacity:1;"
+     offset="0.67808217"
+     id="stop14631" /><stop
+     style="stop-color:#737373;stop-opacity:1;"
+     offset="1"
+     id="stop14623" /></linearGradient>
+<linearGradient
+   id="SVGID_2_"
+   gradientUnits="userSpaceOnUse"
+   x1="10.3594"
+   y1="245.4326"
+   x2="166.6973"
+   y2="245.4326"
+   gradientTransform="translate(196.16078,28.687246)">
+	<stop
+   offset="0"
+   style="stop-color:#FFFFFF"
+   id="stop10067" />
+	<stop
+   offset="0.1889"
+   style="stop-color:#ECECEC"
+   id="stop10069" />
+	<stop
+   offset="0.4213"
+   style="stop-color:#D9D9D9"
+   id="stop10071" />
+	<stop
+   offset="0.6966"
+   style="stop-color:#F8F8F8"
+   id="stop10073" />
+	<stop
+   offset="1"
+   style="stop-color:#737373"
+   id="stop10075" />
+</linearGradient><linearGradient
+   inkscape:collect="always"
+   xlink:href="#linearGradient14625"
+   id="linearGradient13020"
+   x1="40.001408"
+   y1="12.106875"
+   x2="60.545467"
+   y2="12.106875"
+   gradientUnits="userSpaceOnUse" /></defs>
+<linearGradient
+   id="SVGID_1_"
+   gradientUnits="userSpaceOnUse"
+   x1="45.543499"
+   y1="379.75101"
+   x2="81.611801"
+   y2="379.75101">
+	<stop
+   offset="0"
+   style="stop-color:#D0D0D0"
+   id="stop9293" />
+	<stop
+   offset="1"
+   style="stop-color:#444444"
+   id="stop9295" />
+</linearGradient>
+<path
+   id="polygon9298"
+   d="M 93.100136,238.65497 92.830605,1342.196 H 128.8306 L 128.899,238.65497 Z"
+   sodipodi:nodetypes="ccccc"
+   style="fill:#00a94f;fill-opacity:1;stroke-width:1.20502" />
+
+
+
+<polyline
+   fill="none"
+   stroke="#000000"
+   stroke-width="0.1764"
+   stroke-linecap="round"
+   stroke-linejoin="round"
+   points="  45.813,29.731 45.813,0.088 81.612,0.088 81.612,29.731 "
+   id="polyline9306"
+   transform="translate(47.287605,238.56762)" />
+
+<g
+   id="g4836"
+   transform="matrix(9.6427248,0,0,9.6427248,-374.04625,6.6937342)"><rect
+     style="fill:#b3b3b3;fill-rule:evenodd;stroke:none;stroke-width:0.0518526;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;paint-order:stroke fill markers"
+     id="rect4830"
+     width="25.745213"
+     height="22.450733"
+     x="-0.7657311"
+     y="-61.513126"
+     transform="rotate(90)" /><rect
+     style="fill:url(#linearGradient13020);fill-rule:evenodd;stroke-width:10.4374;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;fill-opacity:1.0"
+     id="rect4822"
+     width="20.54406"
+     height="23.867188"
+     x="40.001408"
+     y="0.17328151" /></g><rect
+   style="fill:#1a1a1a;fill-opacity:1;fill-rule:evenodd;stroke:#000000;stroke-width:8.94712;stroke-linecap:round;stroke-linejoin:miter;paint-order:stroke fill markers"
+   id="rect11477"
+   width="213.69649"
+   height="22.880238"
+   x="4.0165601"
+   y="1343.5909" /></svg>

@@ -26,6 +26,18 @@ uv run streamlit run src/panoloc/app.py
 # The corresponding files are stored in data/raw/<sequence_id>/<picture_id>.{jpg,json}
 ```
 
+### Web map
+
+A Next.js map of the traffic signs detected in Panoramax pictures, read from MongoDB (`make populate`):
+
+```sh
+make web-install
+cp web/.env.example web/.env.local
+make web-dev  # http://localhost:3000
+```
+
+See [web/README.md](web/README.md).
+
 Query the metadata with the DuckDB cli:
 
 ```sh

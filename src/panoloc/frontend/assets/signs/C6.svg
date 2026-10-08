@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 13.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="576px" height="576px" viewBox="-0.531 -0.531 576 576" enable-background="new -0.531 -0.531 576 576"
+	 xml:space="preserve">
+<defs>
+</defs>
+<path fill="#FFFFFF" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" d="M41.496,574.438h491.947
+	c10.872,0,21.3-4.318,28.988-12.007c7.688-7.688,12.007-18.115,12.007-28.988V41.496c0-10.873-4.319-21.3-12.007-28.988
+	C554.742,4.819,544.314,0.5,533.442,0.5H41.496c-10.873,0-21.3,4.319-28.988,12.007C4.819,20.195,0.5,30.623,0.5,41.496v491.947
+	c0,10.873,4.319,21.3,12.007,28.988C20.195,570.119,30.623,574.438,41.496,574.438z"/>
+<polygon fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="
+	41.496,533.442 533.442,533.442 533.442,533.442 533.442,41.496 533.442,41.496 41.496,41.496 41.496,41.496 "/>
+<path fill="#FFFFFF" stroke="#FFFFFF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" d="M508.398,278.065
+	l-0.885-0.753l-1.031-0.376l-1.568,0H87.89l-1.932-0.1l-0.724,0.154l-0.846,0.924l-0.241,1.233l-0.142,1.387l-1.226,14.511
+	l-0.104,1.227l6.141,1.67l-15.347,49.527l-9.767,12.582l-0.955,48.851l9.727,6.323h57.337l1.359-0.04
+	c-0.455-2.336-0.701-4.747-0.701-7.216c0-20.71,16.79-37.5,37.5-37.5s37.5,16.79,37.5,37.5c0,1.725-0.126,3.418-0.352,5.081h149.398
+	c0.942-22.028,18.02-39.581,38.954-39.581c20.927,0,38,17.539,38.954,39.557h77.121V279.697L508.398,278.065z"/>
+<polygon fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="
+	93.171,299.645 121.83,299.645 121.83,348.552 82.039,348.552 "/>
+<rect x="126.747" y="299.645" fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="82.513" height="48.907"/>
+<rect x="218.175" y="299.645" fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="82.676" height="48.907"/>
+<rect x="309.769" y="299.645" fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="93.328" height="49.907"/>
+<rect x="408.014" y="298.645" fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="85.802" height="49.907"/>
+<ellipse fill="#FFFFFF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" cx="393.241" cy="413.119" rx="31.872" ry="30.891"/>
+<ellipse fill="#FFFFFF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" cx="168.588" cy="408.119" rx="29.872" ry="29.891"/>
+<line fill="none" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" x1="94.927" y1="219.959" x2="94.882" y2="220.107"/>
+</svg>

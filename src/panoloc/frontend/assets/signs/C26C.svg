@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 17.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1"
+	 id="svg2" sodipodi:docname="AJAX.svg" inkscape:version="0.48.1 " xmlns:cc="http://creativecommons.org/ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="595.486px"
+	 height="598.077px" viewBox="-110.103 207.956 595.486 598.077" enable-background="new -110.103 207.956 595.486 598.077"
+	 xml:space="preserve">
+<path id="path6" inkscape:connector-curvature="0" fill="#FFFFFF" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="
+	M-66.64,805.034h508.56c11.264,0,22.029-4.486,30.003-12.46c7.974-7.974,12.46-18.839,12.46-30.103V251.519
+	c0-11.264-4.486-22.129-12.46-30.103c-7.974-7.974-18.74-12.46-30.003-12.46H-66.64c-11.264,0-22.029,4.486-30.003,12.46
+	c-7.974,7.974-12.46,18.839-12.46,30.103v510.852c0,11.264,4.486,22.129,12.46,30.103C-88.669,800.548-77.904,805.034-66.64,805.034
+	L-66.64,805.034z"/>
+<polyline id="polyline8" fill="#0000FF" points="-66.64,759.182 441.721,759.182 441.721,250.821 -66.64,250.821 -66.64,759.182 "/>
+<path fill="#FFFFFF" d="M424.383,278.835l-3.53,3.98c-97.246,123.21-151.909,289.67-170.915,460.52H125.143
+	c-19.006-170.85-73.677-337.31-170.915-460.52l-3.53-3.98h82.786c66.136,89.71,110.823,200.65,136.748,318.97l1.631,9.24v-167.73
+	h31.354v167.73l1.631-9.24c25.917-118.32,70.612-229.26,136.748-318.97H424.383z"/>
+<g>
+	<rect id="rect12" x="149.015" y="308.436" fill="#FFFFFF" width="77.051" height="140.248"/>
+	<rect id="rect14" x="156.69" y="337.342" fill="#FF0000" stroke="#D40000" width="19.238" height="17.244"/>
+	<rect id="rect16" x="156.69" y="371.532" fill="#FF0000" stroke="#D40000" width="19.238" height="15.949"/>
+	<rect id="rect18" x="156.69" y="403.13" fill="#FF0000" stroke="#D40000" width="19.238" height="17.244"/>
+	<rect id="rect20" x="197.857" y="337.342" fill="#FF0000" stroke="#D40000" width="19.238" height="17.244"/>
+	<rect id="rect22" x="197.857" y="371.532" fill="#FF0000" stroke="#D40000" width="19.238" height="15.949"/>
+	<rect id="rect24" x="197.857" y="403.13" fill="#FF0000" stroke="#D40000" width="19.238" height="17.244"/>
+	<rect id="rect26" x="177.921" y="317.407" fill="#FF0000" stroke="#D40000" width="19.238" height="17.942"/>
+	<rect id="rect28" x="177.323" y="354.886" fill="#FF0000" stroke="#D40000" width="19.238" height="16.547"/>
+	<rect id="rect30" x="177.323" y="387.182" fill="#FF0000" stroke="#D40000" width="19.238" height="15.949"/>
+	<rect id="rect32" x="177.921" y="421.072" fill="#FF0000" stroke="#D40000" width="19.238" height="17.942"/>
+	<rect id="rect34" x="156.391" y="316.709" fill="none" stroke="#FF0000" stroke-width="4" width="61.103" height="122.306"/>
+</g>
+</svg>

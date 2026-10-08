@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 13.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="598px" height="600px" viewBox="0 -0.031 598 600" enable-background="new 0 -0.031 598 600"
+	 xml:space="preserve">
+<defs>
+</defs>
+<line fill="none" stroke="#000000" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" x1="596.049" y1="554.011" x2="596.049" y2="43.927"/>
+<polyline fill="none" stroke="#000000" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" points="
+	596.049,43.927 595.403,36.545 593.485,29.389 590.354,22.673 586.104,16.604 580.865,11.364 574.796,7.115 568.08,3.983 
+	560.923,2.065 553.542,1.42 "/>
+<polyline fill="none" stroke="#000000" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" points="43.458,1.42 
+	36.077,2.065 28.92,3.983 22.205,7.115 16.135,11.364 10.896,16.604 6.646,22.673 3.515,29.389 1.597,36.545 0.951,43.927 "/>
+<line fill="none" stroke="#000000" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" x1="0.951" y1="43.927" x2="0.951" y2="554.011"/>
+<path fill="#FFFFFF" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M43.515,598.938h510.183
+	c11.275,0,22.089-4.498,30.063-12.508c7.973-8.011,12.452-18.873,12.452-30.201V43.71c0-11.327-4.479-22.191-12.452-30.2
+	C575.787,5.5,564.974,1,553.698,1H43.515C32.24,1,21.425,5.5,13.453,13.51C5.479,21.519,1,32.383,1,43.71v512.519
+	c0,11.328,4.479,22.19,12.453,30.201C21.425,594.439,32.24,598.938,43.515,598.938z"/>
+<polyline fill="#0000FF" stroke="#0000FF" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" points="
+	33.256,564.212 563.744,564.212 563.744,33.725 33.256,33.725 33.256,564.212 "/>
+<polyline fill="#FFFFFF" stroke="#0000FF" stroke-width="0.7087" stroke-linecap="round" stroke-linejoin="round" points="
+	54.659,483.091 301.625,80.58 538.193,483.091 54.659,483.091 "/>
+<polyline fill="none" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" points="193.97,298.749 
+	278.968,298.749 414.97,298.749 "/>
+<polygon stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="314.97,348.749 
+	297.97,372.749 306.97,374.749 307.97,383.749 258.97,383.749 258.97,375.749 274.97,374.749 306.97,348.749 272.97,299.749 
+	281.97,297.749 "/>
+<polygon stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="171.97,380.749 
+	431.97,380.749 457.97,428.749 457.97,445.749 452.97,449.749 153.97,449.749 149.97,447.749 148.97,431.749 148.97,426.749 
+	168.97,384.749 "/>
+<ellipse stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" cx="200.303" cy="445.083" rx="10.667" ry="10.333"/>
+<ellipse transform="matrix(0.9934 -0.1146 0.1146 0.9934 -49.5476 29.5958)" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" cx="232.651" cy="445.764" rx="10.333" ry="10.665"/>
+<ellipse transform="matrix(0.9934 -0.1146 0.1146 0.9934 -48.5125 46.2852)" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" cx="378.314" cy="445.085" rx="10.333" ry="10.666"/>
+<ellipse transform="matrix(0.9934 -0.1146 0.1146 0.9934 -48.3892 49.7251)" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" cx="408.315" cy="445.752" rx="10.333" ry="10.665"/>
+<line fill="none" stroke="#000000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" x1="97.97" y1="460.083" x2="511.97" y2="460.083"/>
+<polyline fill="#FFFFFF" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="
+	175.635,390.749 177.635,389.416 432.303,388.749 434.303,390.749 447.637,422.082 447.637,424.749 445.637,426.749 
+	443.637,427.416 167.635,428.749 164.303,426.082 162.303,424.749 162.303,422.749 172.97,391.416 "/>
+<rect x="190.303" y="386.416" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="8.667" height="45.333"/>
+<rect x="277.303" y="389.083" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="8.667" height="39.333"/>
+<rect x="321.97" y="389.75" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="8.666" height="39.333"/>
+<rect x="408.97" y="385.75" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="8.666" height="45.333"/>
+<rect x="439.141" y="382.84" transform="matrix(0.9021 -0.4316 0.4316 0.9021 -132.5474 230.1237)" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="3.294" height="48.561"/>
+</svg>
