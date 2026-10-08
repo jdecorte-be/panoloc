@@ -8,3 +8,6 @@ checkpoints/
 
 # Python
 __pycache__
+
+# Environment
+.env

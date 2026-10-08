@@ -1,13 +1,17 @@
 import json
 import math
+import os
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import requests
+from pymongo import MongoClient
+from pymongo.collection import Collection
 
 DATA_DIR = Path("data/raw")
 CHUNK_SIZE = 1 << 16  # 64 KiB per read when streaming an image
-API = "https://api.panoramax.xyz/api"
+COLLECTION = "pictures"  # filled by `make populate`
 M_PER_DEG_LAT = 111_320  # meters per degree of latitude (approx.)
 TIMEOUT_S = 10
 
@@ -21,13 +25,63 @@ class PictureNotFound(Exception):
     pass
 
 
+@cache
+def pictures() -> Collection:
+    """The MongoDB collection, connected with the same settings as docker-compose.yml."""
+    uri = os.environ.get("MONGO_URI") or (
+        "mongodb://{user}:{password}@{host}:{port}/?authSource=admin".format(
+            user=os.environ.get("MONGO_ROOT_USERNAME", "panoloc"),
+            password=os.environ.get("MONGO_ROOT_PASSWORD", "panoloc"),
+            host=os.environ.get("MONGO_HOST", "localhost"),
+            port=os.environ.get("MONGO_PORT", "27017"),
+        )
+    )
+    client = MongoClient(uri, serverSelectionTimeoutMS=TIMEOUT_S * 1000)
+    return client[os.environ.get("MONGO_DATABASE", "panoloc")][COLLECTION]
+
+
+def to_item(doc: Item) -> Item:
+    """A database document as the STAC item the Panoramax API returns."""
+    annotations: dict[str, Item] = {}  # by id, in their order of appearance
+    picture_semantics = []
+    for s in doc.get("semantics") or []:
+        tag = {"key": s["key"], "value": s["value"]}
+        on = s.get("on") or {}
+        if on.get("field") == "annotation":
+            annot = annotations.setdefault(
+                on["id"],
+                {"id": on["id"], "shape": on["geometry"], "semantics": []},
+            )
+            annot["semantics"].append(tag)
+        elif (
+            on.get("field") != "collection"
+        ):  # the sequence's tags are not the picture's
+            picture_semantics.append(tag)
+    return {
+        "id": doc["id"],
+        "collection": doc["collection"],
+        "geometry": doc["geometry"],
+        "properties": {
+            "datetime": doc.get("datetime"),
+            "view:azimuth": doc.get("azimuth"),
+            "quality:horizontal_accuracy": doc.get("horizontal_accuracy"),
+            "pers:interior_orientation": doc.get("interior_orientation"),
+            "semantics": picture_semantics,
+            "annotations": list(annotations.values()),
+        },
+        "assets": {
+            name: {"href": href}
+            for name, href in (doc.get("assets") or {}).items()
+            if href
+        },
+    }
+
+
 def get_picture(pic_id: str) -> Item:
-    r = SESSION.get(f"{API}/search", params={"ids": pic_id}, timeout=TIMEOUT_S)
-    r.raise_for_status()
-    features = r.json()["features"]
-    if not features:
+    doc = pictures().find_one({"_id": pic_id})
+    if doc is None:
         raise PictureNotFound(pic_id)
-    return features[0]
+    return to_item(doc)
 
 
 def bbox_around(lon: float, lat: float, radius_m: float) -> str:
@@ -36,15 +90,18 @@ def bbox_around(lon: float, lat: float, radius_m: float) -> str:
     return f"{lon - dlon},{lat - dlat},{lon + dlon},{lat + dlat}"
 
 
-def fetch_sequence_items(
-    seq_id: str, bbox: str, limit: int = 10_000
-) -> list[Item]:
-    # /collections/{id}/items ignores bbox (it returns the whole sequence), so use
-    # /search. It does not paginate: anything past `limit` is silently dropped.
-    params = {"bbox": bbox, "collections": seq_id, "limit": limit}
-    r = SESSION.get(f"{API}/search", params=params, timeout=TIMEOUT_S)
-    r.raise_for_status()
-    return r.json()["features"]
+def fetch_sequence_items(seq_id: str, bbox: str) -> list[Item]:
+    x0, y0, x1, y1 = (float(v) for v in bbox.split(","))
+    ring = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
+    query = {
+        "collection": seq_id,
+        "geometry": {
+            "$geoWithin": {
+                "$geometry": {"type": "Polygon", "coordinates": [ring]}
+            }
+        },
+    }
+    return [to_item(doc) for doc in pictures().find(query)]
 
 
 def save_item(item: Item) -> Path:
@@ -93,16 +150,12 @@ def nearby_pictures(
             "datetime": f["properties"].get("datetime"),
             "lon": f["geometry"]["coordinates"][0],
             "lat": f["geometry"]["coordinates"][1],
-            "thumb": f["assets"]["thumb"]["href"],
-            "hd": f["assets"]["hd"]["href"],
+            "thumb": f["assets"].get("thumb", {}).get("href"),
+            "hd": f["assets"].get("hd", {}).get("href"),
             "item": f,  # full STAC item: annotations, azimuth, tags...
         }
         for f in items
-        if f["collection"] == seq
     ]
-    # the API's bbox filter is loose: a few pictures just outside slip through
-    x0, y0, x1, y1 = (float(v) for v in bbox.split(","))
-    pics = [p for p in pics if x0 <= p["lon"] <= x1 and y0 <= p["lat"] <= y1]
     # only annotated pictures are useful; the target stays, the viewer jumps to it
     pics = [
         p

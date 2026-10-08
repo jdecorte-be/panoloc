@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 13.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="576px" height="576px" viewBox="-0.531 -0.531 576 576" enable-background="new -0.531 -0.531 576 576"
+	 xml:space="preserve">
+<defs>
+</defs>
+<circle fill="#FFFFFF" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" cx="287.469" cy="287.469" r="286.969"/>
+<circle fill="#FF0000" stroke="#FF0000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" cx="287.469" cy="287.469" r="273.982"/>
+<circle fill="#FFFFFF" stroke="#FF0000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" cx="287.469" cy="287.469" r="192.438"/>
+<polygon fill="#FF0000" stroke="#FF0000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="
+	314.792,252.183 338.797,252.183 338.797,414.236 371.803,414.236 371.803,252.183 394.307,252.183 353.8,171.156 "/>
+<polygon stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="188.77,173.346 
+	239.779,173.346 239.779,295.981 272.785,295.981 217.275,412.047 154.263,298.171 190.27,298.171 "/>
+</svg>

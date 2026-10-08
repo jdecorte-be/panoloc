@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="430" height="366" id="svg3864" version="1.1" inkscape:version="0.91 r13725" sodipodi:docname="France_road_sign_M4m.svg">
+  <defs id="defs3866"/>
+  <sodipodi:namedview id="base" pagecolor="#ffffff" bordercolor="#666666" borderopacity="1.0" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:zoom="0.6871719" inkscape:cx="-7.8266119" inkscape:cy="57.852457" inkscape:document-units="px" inkscape:current-layer="layer1" showgrid="false" inkscape:snap-bbox="true" inkscape:bbox-paths="true" inkscape:bbox-nodes="true" inkscape:snap-bbox-edge-midpoints="true" inkscape:snap-bbox-midpoints="true" inkscape:object-paths="true" inkscape:snap-intersection-paths="true" inkscape:object-nodes="true" inkscape:snap-smooth-nodes="true" inkscape:snap-midpoints="true" inkscape:snap-object-midpoints="true" inkscape:snap-center="true" inkscape:snap-page="true" showguides="true" inkscape:guide-bbox="true" inkscape:window-width="1440" inkscape:window-height="788" inkscape:window-x="0" inkscape:window-y="1" inkscape:window-maximized="1"/>
+  <metadata id="metadata3869">
+    <rdf:RDF>
+      <cc:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+        <dc:title/>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g inkscape:label="Calque 1" inkscape:groupmode="layer" id="layer1" transform="translate(0,-686.36219)">
+    <rect style="fill:#ffffff;stroke:#000000;stroke-width:2.209692;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" id="rect2995" width="427.79013" height="363.79031" x="1.1049371" y="687.46704" ry="64.742134"/>
+    <g id="g4285" transform="matrix(1.384742,0,0,1.384742,965.48278,2.0987819)">
+      <polygon transform="translate(-829.3453,340.32404)" id="polygon4244" points="328.114,357.475 335.096,356.991 335.096,351.176 340.085,345.361 354.383,345.361 359.371,351.176 359.371,393.329 354.716,399.143 340.085,399.627 335.428,394.298 335.096,387.999 328.114,387.999 328.114,376.371 293.531,378.309 285.883,382.186 277.237,378.793 243.32,375.886 243.32,387.999 236.004,387.999 236.004,393.813 232.347,398.659 215.721,399.143 212.396,393.813 212.728,351.661 216.385,345.848 231.682,345.848 236.004,350.691 236.336,356.991 243.652,357.475 243.652,368.619 277.57,366.682 284.885,362.805 293.531,366.195 328.114,368.619 " style="stroke:#000000;stroke-width:0.17640001;stroke-linecap:round;stroke-linejoin:round"/>
+      <rect id="rect4246" height="4.8449998" width="167.925" y="667.27502" x="-625.92828" style="stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"/>
+      <polygon transform="translate(-829.3453,340.32404)" id="polygon4248" points="341.393,298.614 234.724,299.831 234.724,189.119 341.393,189.119 " style="fill:none;stroke:#ffff00;stroke-width:0.17640001;stroke-linecap:round;stroke-linejoin:round"/>
+      <polygon transform="translate(-829.3453,340.32404)" id="polygon4250" points="363.061,314.43 212.223,313.213 224.724,175.736 350.56,175.736 " style="stroke:#000000;stroke-width:7;stroke-linecap:round;stroke-linejoin:round"/>
+      <rect id="rect4252" height="121" width="112" y="524.38104" x="-598.28827" style="fill:#f17e01"/>
+    </g>
+  </g>
+</svg>

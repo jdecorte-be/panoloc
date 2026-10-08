@@ -103,8 +103,7 @@ def box_label(signs: list[tuple[int | None, str]]) -> str:
 
 def distance_label(dist_m: float | None) -> str:
     """How far the sign is from the camera, empty when it is not located."""
-    # / 2 because each cell is 50cm
-    return "" if dist_m is None else f"{dist_m / 2:.0f} m"
+    return "" if dist_m is None else f"{dist_m:.0f} m"
 
 
 def sign_numbers(signs):

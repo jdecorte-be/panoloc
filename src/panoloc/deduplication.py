@@ -73,6 +73,7 @@ def sign_types_of(annot: Item) -> list[str]:
     )
 
 
+# ? to fix watching the north
 def travel_azimuths(items: list[Item]) -> dict[str, float]:
     """
     Args:

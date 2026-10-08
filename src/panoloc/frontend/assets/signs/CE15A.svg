@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 15.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="576px" height="576px" viewBox="-0.031 -0.031 576 576" enable-background="new -0.031 -0.031 576 576"
+	 xml:space="preserve">
+<defs>
+</defs>
+<path fill="#FFFFFF" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M41.996,574.938h491.947
+	c10.872,0,21.3-4.318,28.988-12.007c7.688-7.688,12.007-18.115,12.007-28.988V41.996c0-10.873-4.319-21.3-12.007-28.988
+	C555.242,5.319,544.814,1,533.942,1H41.996c-10.873,0-21.3,4.319-28.988,12.007C5.319,20.695,1,31.123,1,41.996v491.947
+	c0,10.873,4.319,21.3,12.007,28.988C20.695,570.619,31.123,574.938,41.996,574.938z"/>
+<polygon fill="#0000FF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" points="
+	37.076,538.862 538.862,538.862 538.862,538.862 538.862,37.076 538.862,37.076 37.076,37.076 37.076,37.076 "/>
+<rect x="89.262" y="89.262" fill="#FFFFFF" stroke="#0000FF" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" width="397.414" height="397.414"/>
+<rect x="233.469" y="157.469" fill="#FFFFFF" width="117.5" height="79.5"/>
+<rect x="233.469" y="157.469" fill="none" width="117.5" height="79.5"/>
+<path fill="none" d="M189.302,396.381c1.537,3.206,4.675,5.404,8.302,5.404c3.656,0,6.816-2.234,8.338-5.482h-0.307V269.469h15.333
+	v0.5h6.174l-0.063-4.5h-22.612v-50.521l-15.167,9.595V396.381z"/>
+<path d="M205.969,269.969h15v-0.5h-15.333v126.834h0.307c-1.522,3.248-4.682,5.482-8.338,5.482c-3.627,0-6.766-2.198-8.302-5.404
+	V224.543l15.167-9.595v-47.252l-31.167,47.939v181.333h0.22c0.787,10.79,11.111,19.333,23.738,19.333
+	c13.14,0,23.792-9.25,23.792-20.657c0-0.546-0.034-1.084-0.082-1.618V284.469h-15V269.969z"/>
+<rect x="205.969" y="269.635" width="14.667" height="19"/>
+<rect x="233.469" y="157.469" fill="none" width="117.5" height="79.5"/>
+<path d="M379.469,265.469v-136h-175v38.227v47.252v50.521h22.612l0.054,3.833h-20.832v0.667h-0.333v14.5h15h6.376l1.983,142h-24.86
+	v29.5h175v-29.5h-25.956l6.492-161H379.469z M350.969,236.969h-117.5v-79.5h117.5V236.969z"/>
+</svg>

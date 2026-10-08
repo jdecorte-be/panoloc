@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 13.0.0, SVG Export Plug-In  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+]>
+<svg version="1.1"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/"
+	 x="0px" y="0px" width="576px" height="576px" viewBox="-0.933 -0.933 576 576" enable-background="new -0.933 -0.933 576 576"
+	 xml:space="preserve">
+<defs>
+</defs>
+<path stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" d="M0.088,533.048V41.085
+	c0-10.873,4.319-21.301,12.008-28.989S30.212,0.088,41.085,0.088h491.963c10.873,0,21.301,4.319,28.989,12.008
+	s12.008,18.116,12.008,28.989v491.963c0,10.873-4.319,21.301-12.008,28.989s-18.116,12.008-28.989,12.008H41.085
+	c-10.873,0-21.301-4.319-28.989-12.008S0.088,543.921,0.088,533.048z"/>
+<path fill="#FFFFFF" stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" d="M97.657,557.647
+	h435.391c6.524,0,12.78-2.592,17.394-7.205s7.205-10.87,7.205-17.394V97.657l-91.417,91.417
+	c-18.739-34.261-46.909-62.431-81.17-81.17l91.417-91.417H41.085c-6.524,0-12.78,2.592-17.394,7.205
+	c-4.613,4.613-7.205,10.87-7.205,17.394v435.392l91.417-91.416c18.739,34.261,46.908,62.431,81.169,81.17L97.657,557.647z"/>
+<ellipse fill="#AFAFAF" stroke="#ADADAD" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" cx="285.067" cy="283.567" rx="188.486" ry="189.986"/>
+<path stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" d="M191.236,225.125l169.44,148.253
+	c-42.985,38.068-107.892,38.263-151.107,0.45C166.354,336.018,158.479,272.144,191.236,225.125z"/>
+<path stroke="#000000" stroke-width="0.1764" stroke-linecap="round" stroke-linejoin="round" d="M213.688,200.885l167.835,146.84
+	c31.63-46.35,23.594-108.623-18.804-145.717C320.323,164.914,256.633,164.435,213.688,200.885z"/>
+</svg>
