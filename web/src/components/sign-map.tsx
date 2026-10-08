@@ -13,6 +13,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { SignPanel, type MapStatus } from "@/components/sign-panel";
+import { byTier } from "@/lib/counts";
 import { boxesOf } from "@/lib/labels";
 import {
   addBlankImage,
@@ -22,9 +23,10 @@ import {
   loadSignImages,
   VIEW_CONE,
 } from "@/lib/sign-images";
-import { TILE_DEG, tilesOf } from "@/lib/tiles";
+import { MAX_TILES, TILE_DEG, tilesOf } from "@/lib/tiles";
 import type {
   CamerasResponse,
+  CountsResponse,
   Detection,
   LocatedResponse,
   LocatedSign,
@@ -43,8 +45,10 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 // Strasbourg, the default picture of the Streamlit app
 const INITIAL_CENTER: [number, number] = [7.741354, 48.589898];
 const INITIAL_ZOOM = 17;
-// below that a view has too many tiles to locate
-const MIN_ZOOM = 16;
+// below that a view has too many tiles to locate: the signs are counted instead
+const DETAIL_ZOOM = 16;
+// width of a square of counted signs on the screen, about
+const COUNT_PX = 120;
 // zoom of the inset map around the camera of the 360° view
 const INSET_ZOOM = 18;
 const FADED = 0.3;
@@ -57,6 +61,7 @@ const SIGN_DISC_PX = ICON_PX / 2 + 3;
 const SIGN_DOT_PX = 5;
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
+const COMPACT = new Intl.NumberFormat("en", { notation: "compact" });
 // the same array on every render: memos depending on it hold
 const NO_DETECTIONS: Detection[] = [];
 
@@ -115,14 +120,88 @@ function rayLines(signs: LocatedSign[]): FeatureCollection<LineString> {
   };
 }
 
+/** Tiles per side of a square of counts: a power of two, COUNT_PX wide or so. */
+function countSize(zoom: number): number {
+  const deg = (COUNT_PX * 360) / (512 * 2 ** zoom);
+  return 2 ** Math.max(0, Math.round(Math.log2(deg / TILE_DEG)));
+}
+
+// area proportional to the count: 1 sign 10 px, 10 000 signs 34 px
+const COUNT_RADIUS: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["sqrt", ["get", "count"]],
+  1,
+  10,
+  100,
+  34,
+];
+
+function countPoints(counts: CountsResponse["counts"]): FeatureCollection<Point> {
+  return {
+    type: "FeatureCollection",
+    features: counts.map(([lon, lat, count]) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lon, lat] },
+      properties: { count, label: COMPACT.format(count) },
+    })),
+  };
+}
+
 function addLayers(map: MapLibreMap) {
   for (const id of ["cameras", "rays", "signs", "view"]) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
+  map.addSource("counts", { type: "geojson", data: EMPTY, generateId: true });
+  // zoomed out: the signs counted by squares, the area growing with the count,
+  // the biggest drawn on top
+  const hovered: ExpressionSpecification = ["boolean", ["feature-state", "hover"], false];
+  map.addLayer({
+    id: "count-halos",
+    type: "circle",
+    source: "counts",
+    maxzoom: DETAIL_ZOOM,
+    layout: { "circle-sort-key": ["get", "count"] },
+    paint: {
+      "circle-radius": ["+", COUNT_RADIUS, ["case", hovered, 9, 6]],
+      "circle-color": byTier("fill"),
+      "circle-opacity": ["case", hovered, 0.35, 0.2],
+    },
+  });
+  map.addLayer({
+    id: "count-circles",
+    type: "circle",
+    source: "counts",
+    maxzoom: DETAIL_ZOOM,
+    layout: { "circle-sort-key": ["get", "count"] },
+    paint: {
+      "circle-radius": COUNT_RADIUS,
+      "circle-color": byTier("fill"),
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": ["case", hovered, 3, 2],
+    },
+  });
+  map.addLayer({
+    id: "count-labels",
+    type: "symbol",
+    source: "counts",
+    maxzoom: DETAIL_ZOOM,
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": ["interpolate", ["linear"], ["get", "count"], 1, 11, 1000, 13, 10000, 15],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+      "symbol-sort-key": ["get", "count"],
+    },
+    paint: { "text-color": byTier("text") },
+  });
+  // zoomed in: the signs themselves
   map.addLayer({
     id: "rays",
     type: "line",
     source: "rays",
+    minzoom: DETAIL_ZOOM,
     layout: { visibility: "none" },
     paint: { "line-color": CAMERA, "line-width": 1, "line-opacity": 0.6 },
   });
@@ -130,6 +209,7 @@ function addLayers(map: MapLibreMap) {
     id: "rays-selected",
     type: "line",
     source: "rays",
+    minzoom: DETAIL_ZOOM,
     filter: ["==", ["get", "id"], ""],
     paint: { "line-color": SEEN, "line-width": 2 },
   });
@@ -137,6 +217,7 @@ function addLayers(map: MapLibreMap) {
     id: "cameras",
     type: "circle",
     source: "cameras",
+    minzoom: DETAIL_ZOOM,
     paint: {
       "circle-radius": 4,
       "circle-color": CAMERA,
@@ -174,6 +255,7 @@ function addLayers(map: MapLibreMap) {
     id: "sign-discs",
     type: "circle",
     source: "signs",
+    minzoom: DETAIL_ZOOM,
     paint: {
       "circle-radius": ["case", ["has", "icon"], SIGN_DISC_PX, SIGN_DOT_PX],
       "circle-color": "#ffffff",
@@ -185,6 +267,7 @@ function addLayers(map: MapLibreMap) {
     id: "sign-icons",
     type: "symbol",
     source: "signs",
+    minzoom: DETAIL_ZOOM,
     filter: ["has", "icon"],
     layout: {
       "icon-image": ["concat", ICON_PREFIX, ["get", "icon"]],
@@ -196,6 +279,7 @@ function addLayers(map: MapLibreMap) {
     id: "sign-labels",
     type: "symbol",
     source: "signs",
+    minzoom: DETAIL_ZOOM,
     layout: {
       "text-field": ["get", "label"],
       "text-font": ["Noto Sans Bold"],
@@ -298,11 +382,42 @@ export function SignMap() {
     }
   }, []);
 
+  /** The located signs of the view, counted by squares: nothing is located. */
+  const loadCounts = useCallback(async (map: MapLibreMap, signal: AbortSignal) => {
+    const size = countSize(map.getZoom());
+    // one square around: no square cut by the edge of the view
+    const pad = size * TILE_DEG;
+    const b = map.getBounds();
+    const bbox = [
+      Math.max(b.getWest() - pad, -180),
+      Math.max(b.getSouth() - pad, -90),
+      Math.min(b.getEast() + pad, 180),
+      Math.min(b.getNorth() + pad, 90),
+    ];
+    try {
+      const body = await getJson<CountsResponse>(
+        `/api/counts?bbox=${bbox.map((v) => v.toFixed(6)).join(",")}&size=${size}`,
+        signal,
+      );
+      if (mapRef.current !== map) return;
+      map.removeFeatureState({ source: "counts" }); // the ids are new: no hover left behind
+      map.getSource<GeoJSONSource>("counts")?.setData(countPoints(body.counts));
+      const inView = body.counts.filter(([lon, lat]) => b.contains([lon, lat]));
+      setStatus({ kind: "counts", signs: inView.reduce((sum, [, , n]) => sum + n, 0) });
+    } catch (error) {
+      if (signal.aborted) return;
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
+
   const refresh = useCallback(
     async (map: MapLibreMap, signal: AbortSignal) => {
-      if (map.getZoom() < MIN_ZOOM) {
-        setStatus({ kind: "zoom", minZoom: MIN_ZOOM });
-        return; // the signs already drawn stay
+      if (map.getZoom() < DETAIL_ZOOM) {
+        await loadCounts(map, signal);
+        return; // the signs already drawn stay, shown again when zooming in
       }
       const b = map.getBounds();
       const [w, s, e, n] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
@@ -310,20 +425,21 @@ export function SignMap() {
       await render(map);
 
       // the tiles never asked for; the locator answers with those it has, the
-      // others are asked again until located
+      // others are asked again until located, at most MAX_TILES per request
       let missing = tilesOf(w, s, e, n).filter((t) => !tilesRef.current.has(t));
       try {
         while (missing.length && !signal.aborted) {
           setStatus({ kind: "locating", pending: missing.length });
+          const asked = missing.slice(0, MAX_TILES);
           const body = await getJson<LocatedResponse>(
-            `/api/located?tiles=${missing.join(",")}`,
+            `/api/located?tiles=${asked.join(",")}`,
             signal,
           );
           for (const [tile, signs] of Object.entries(body.tiles)) {
             tilesRef.current.set(tile, signs.map(decode));
           }
           if (Object.keys(body.tiles).length) await render(map);
-          missing = body.pending;
+          missing = [...missing.slice(MAX_TILES), ...body.pending];
         }
         if (!signal.aborted) setStatus({ kind: "ready" });
       } catch (error) {
@@ -334,7 +450,7 @@ export function SignMap() {
         });
       }
     },
-    [render, loadCameras],
+    [render, loadCameras, loadCounts],
   );
 
   useEffect(() => {
@@ -385,6 +501,25 @@ export function SignMap() {
         selectSign(e);
       });
     }
+    // a square of counts -> zoomed in on it
+    const zoomIn = (e: { features?: MapGeoJSONFeature[] }) => {
+      const point = e.features?.[0]?.geometry as Point | undefined;
+      if (!point) return;
+      map.easeTo({
+        center: point.coordinates as [number, number],
+        zoom: Math.min(map.getZoom() + 3, DETAIL_ZOOM + 1),
+      });
+    };
+    map.on("click", "count-circles", zoomIn);
+    // the square under the pointer stands out
+    let hover: number | string | undefined;
+    const setHover = (id: number | string | undefined) => {
+      if (hover !== undefined) map.setFeatureState({ source: "counts", id: hover }, { hover: false });
+      hover = id;
+      if (id !== undefined) map.setFeatureState({ source: "counts", id }, { hover: true });
+    };
+    map.on("mousemove", "count-circles", (e) => setHover(e.features?.[0]?.id));
+    map.on("mouseleave", "count-circles", () => setHover(undefined));
     // a camera -> its picture, facing the way the camera did
     map.on("click", "cameras", (e) => {
       const camera = e.features?.[0];
@@ -394,7 +529,13 @@ export function SignMap() {
         position: (camera.geometry as Point).coordinates as [number, number],
       });
     });
-    for (const layer of ["sign-discs", "sign-icons", "sign-labels", "cameras"]) {
+    for (const layer of [
+      "sign-discs",
+      "sign-icons",
+      "sign-labels",
+      "cameras",
+      "count-circles",
+    ]) {
       map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
     }

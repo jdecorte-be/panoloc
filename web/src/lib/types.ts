@@ -48,6 +48,11 @@ export interface LocatedResponse {
   pending: string[];
 }
 
+export interface CountsResponse {
+  /** [lon, lat, count]: the located signs of a square of tiles, at their mean position */
+  counts: [number, number, number][];
+}
+
 /** A sign on the map. */
 export interface LocatedSign extends Omit<TileSign, "rays"> {
   /** stable while the map moves: type and position */

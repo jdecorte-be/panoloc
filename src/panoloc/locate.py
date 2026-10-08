@@ -10,6 +10,9 @@ source files change (see fingerprint).
 
 The server answers at once with the cached tiles, and keeps locating the others,
 the last asked first: the map asks again for those still pending.
+
+Zoomed out, the map asks for /counts instead: the located signs, counted in
+squares of tiles, from a count per tile held in memory.
 """
 
 import argparse
@@ -18,6 +21,7 @@ import json
 import math
 import multiprocessing
 import os
+import re
 import signal
 import sys
 import threading
@@ -187,6 +191,11 @@ class Locator:
         self.running: set[Key] = set()
         self.pool: ProcessPoolExecutor | None = None
         self.pool_fingerprint: str | None = None
+        self.counts_lock = threading.Lock()  # guards the fields below
+        # tile -> its signs and the sums of their coordinates, for the default
+        # parameters; the tiles without a sign are left out
+        self.tile_counts: dict[Tile, tuple[int, float, float]] = {}
+        self.counts_fingerprint: str | None = None
 
     def cached(self, keys: Iterable[Key]) -> dict[Key, list[Item]]:
         by_id = {tile_id(*k): k for k in keys}
@@ -198,6 +207,86 @@ class Locator:
             }
         )
         return {by_id[doc["_id"]]: doc["signs"] for doc in docs}
+
+    def _load_counts(self, current: str) -> None:
+        """The counts of the cached tiles located with this code. Counts lock held."""
+        if self.counts_fingerprint == current:
+            return
+        suffix = tile_id((0, 0), CELL_M, MAX_DIST_M).removeprefix("0:0")
+
+        def total(axis: int) -> dict:
+            return {
+                "$sum": {
+                    "$map": {
+                        "input": "$signs",
+                        "in": {"$arrayElemAt": ["$$this.position", axis]},
+                    }
+                }
+            }
+
+        docs = self.cache.aggregate(
+            [
+                {
+                    "$match": {
+                        "_id": {"$regex": re.escape(suffix) + "$"},
+                        "fingerprint": current,
+                        "signs.0": {"$exists": True},
+                    }
+                },
+                {
+                    "$project": {
+                        "n": {"$size": "$signs"},
+                        "lon": total(0),
+                        "lat": total(1),
+                    }
+                },
+            ]
+        )
+        self.tile_counts = {
+            parse_tile(d["_id"].removesuffix(suffix)): (d["n"], d["lon"], d["lat"])
+            for d in docs
+        }
+        self.counts_fingerprint = current
+
+    def _count(self, key: Key, located_with: str, signs: list[Item]) -> None:
+        """Keep the counts up to date with a tile just located."""
+        tile, cell_m, max_m = key
+        with self.counts_lock:
+            if (cell_m, max_m) != (CELL_M, MAX_DIST_M):
+                return
+            if located_with != self.counts_fingerprint:
+                return  # loaded again from the cache on the next ask
+            if signs:
+                self.tile_counts[tile] = (
+                    len(signs),
+                    sum(s["position"][0] for s in signs),
+                    sum(s["position"][1] for s in signs),
+                )
+            else:
+                self.tile_counts.pop(tile, None)
+
+    def counts(
+        self, west: float, south: float, east: float, north: float, size: int
+    ) -> list[list[float]]:
+        """The located signs of the bbox in squares of size x size tiles, aligned
+        on multiples of size: [lon, lat, count], at the mean position of the signs.
+        Only the cached tiles: nothing is located."""
+        i0 = math.floor(west / TILE_DEG) // size * size
+        j0 = math.floor(south / TILE_DEG) // size * size
+        i1, j1 = math.ceil(east / TILE_DEG), math.ceil(north / TILE_DEG)
+        squares: dict[Tile, list[float]] = {}
+        with self.counts_lock:
+            self._load_counts(fingerprint())
+            for (i, j), (n, lon, lat) in self.tile_counts.items():
+                if i0 <= i < i1 and j0 <= j < j1:
+                    square = squares.setdefault((i // size, j // size), [0, 0.0, 0.0])
+                    square[0] += n
+                    square[1] += lon
+                    square[2] += lat
+        return [
+            [round(lon / n, 6), round(lat / n, 6), n]
+            for n, lon, lat in squares.values()
+        ]
 
     def _fill(self) -> None:
         """Start the waiting tiles while there are idle workers. Lock held."""
@@ -227,6 +316,7 @@ class Locator:
                 {"$set": {"fingerprint": located_with, "signs": signs}},
                 upsert=True,
             )
+            self._count(key, located_with, signs)
         except Exception as e:  # noqa: BLE001 - one tile, the others go on
             print(f"tile {tile_id(*key)} failed: {e!r}", file=sys.stderr)
         with self.changed:
@@ -260,7 +350,8 @@ class Locator:
             while (left := deadline - time.monotonic()) > 0 and any(
                 k in self.running or k in self.waiting for k in missing
             ):
-                self.changed.wait(left)
+                # None: a lock's timeout cannot be infinite
+                self.changed.wait(None if math.isinf(left) else left)
         return found | self.cached(missing)
 
 
@@ -274,10 +365,24 @@ def serve(port: int) -> None:
                 self.send_response(204)
                 self.end_headers()
                 return
+            q = parse_qs(url.query)
+            if url.path == "/counts":
+                try:
+                    west, south, east, north = (
+                        float(v) for v in q["bbox"][0].split(",")
+                    )
+                    size = int(q["size"][0])
+                    if size < 1:
+                        raise ValueError(size)
+                except KeyError, ValueError:
+                    self.send_error(400, "expected bbox=w,s,e,n&size=tiles")
+                    return
+                counts = locator.counts(west, south, east, north, size)
+                self._json({"counts": counts})
+                return
             if url.path != "/tiles":
                 self.send_error(404)
                 return
-            q = parse_qs(url.query)
             try:
                 tiles = [parse_tile(t) for t in q["tiles"][0].split(",") if t]
                 cell_m = float(q.get("cell", [CELL_M])[0])
@@ -288,12 +393,15 @@ def serve(port: int) -> None:
                 return
             keys = [(t, cell_m, max_m) for t in tiles]
             found = locator.locate(keys, wait_s)
-            body = json.dumps(
+            self._json(
                 {
                     "tiles": {tile_name(k[0]): found[k] for k in keys if k in found},
                     "pending": [tile_name(k[0]) for k in keys if k not in found],
                 }
-            ).encode()
+            )
+
+        def _json(self, value: object) -> None:
+            body = json.dumps(value).encode()
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

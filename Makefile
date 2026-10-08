@@ -21,7 +21,7 @@ TO_ROW       ?=
 # times a failed batch is retried before it is skipped
 RETRIES      ?= 2
 
-.PHONY: help install run test lint format db-up db-down db-logs db-shell db-reset db-index populate locate web-install web-dev clean
+.PHONY: help install run test lint format db-up db-down db-logs db-shell db-reset db-index populate locate push-signs web-install web-dev clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -94,6 +94,9 @@ db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 
 locate: ## Locate the signs of LOCATE_BBOX ahead of the web map (cached in MongoDB)
 	uv run python -m panoloc.locate $(LOCATE_BBOX)
+
+push-signs: ## Push the type and position of the signs of LOCATE_BBOX to SIGNS_URI
+	uv run python -m panoloc.push_signs $(LOCATE_BBOX)
 
 web-install: ## Install the web app dependencies
 	pnpm --dir web install

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SignIcon } from "@/components/sign-icon";
+import { COUNT_TIERS } from "@/lib/counts";
 import { signLabel, type Box } from "@/lib/labels";
 import { VIEWER } from "@/lib/panoramax";
 import type { LocatedSign, Selection, SignRay } from "@/lib/types";
@@ -14,7 +15,7 @@ const RAYS_SHOWN = 8;
 
 export type MapStatus =
   | { kind: "loading" }
-  | { kind: "zoom"; minZoom: number }
+  | { kind: "counts"; signs: number }
   | { kind: "locating"; pending: number }
   | { kind: "ready" }
   | { kind: "error"; message: string };
@@ -31,8 +32,12 @@ function StatusLine({
   if (status.kind === "error") {
     return <p className="text-red-600 dark:text-red-400">{status.message}</p>;
   }
-  if (status.kind === "zoom") {
-    return <p className="text-muted">Zoom in (level {status.minZoom}+) to locate the signs.</p>;
+  if (status.kind === "counts") {
+    return (
+      <p>
+        <strong>{status.signs.toLocaleString("en")}</strong> signs located in view
+      </p>
+    );
   }
   return (
     <p>
@@ -41,6 +46,27 @@ function StatusLine({
         <span className="text-muted"> · locating {status.pending} more tiles…</span>
       )}
     </p>
+  );
+}
+
+/** The colors of the counted squares, and what a click does. */
+function CountLegend() {
+  return (
+    <section className="mt-3 border-t border-line pt-3">
+      <h2 className="mb-1.5 text-xs font-medium text-muted">Signs per area</h2>
+      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        {COUNT_TIERS.map((t) => (
+          <li key={t.min} className="flex items-center gap-1.5">
+            <span
+              className="size-3 rounded-full ring-2 ring-white dark:ring-white/80"
+              style={{ backgroundColor: t.fill }}
+            />
+            {t.label}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted">Click a group to zoom in on its signs.</p>
+    </section>
   );
 }
 
@@ -217,14 +243,16 @@ export function SignPanel({
       </p>
       <StatusLine status={status} signs={located.length} cameras={cameras} />
       <div className={details}>
-        <label className="mt-2 flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={showRays}
-            onChange={(e) => onShowRays(e.target.checked)}
-          />
-          Show the rays from the cameras
-        </label>
+        {status.kind !== "counts" && (
+          <label className="mt-2 flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={showRays}
+              onChange={(e) => onShowRays(e.target.checked)}
+            />
+            Show the rays from the cameras
+          </label>
+        )}
         {selected ? (
           <>
             {sign && (
@@ -237,6 +265,8 @@ export function SignPanel({
             )}
             <PictureSection selected={selected} boxes={boxes} onFocus={onFocus} />
           </>
+        ) : status.kind === "counts" ? (
+          <CountLegend />
         ) : (
           <Legend located={located} />
         )}
