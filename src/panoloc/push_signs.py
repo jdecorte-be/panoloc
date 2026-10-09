@@ -3,8 +3,8 @@
     SIGNS_URI=mongodb://... python -m panoloc.push_signs
 
 The signs are located in every tile a picture with a traffic sign sees, like the web
-map's (panoloc.locate), reusing and filling its cache in the local database: a run
-stopped goes on from there. They are written to a staging collection that replaces
+map's (panoloc.locate), reusing and filling its cache (in the local database, or
+with --cache local in a SQLite file): a run stopped goes on from there. They are written to a staging collection that replaces
 the target at the end, so the target never shows a partial run, and a run after an
 algorithm change leaves no stale sign behind. A write that fails is tried again.
 """
@@ -28,8 +28,10 @@ from panoloc.locate import (
     CELL_M,
     MAX_DIST_M,
     Locator,
+    add_cache_args,
     add_worker_args,
     locate_chunks,
+    open_cache,
     seen_tiles,
 )
 
@@ -77,6 +79,7 @@ def main() -> None:
     parser.add_argument("--db", default=DATABASE)
     parser.add_argument("--collection", default=COLLECTION)
     add_worker_args(parser)
+    add_cache_args(parser)
     args = parser.parse_args()
     if not args.uri:
         parser.error("the target MongoDB: --uri or SIGNS_URI")
@@ -86,7 +89,12 @@ def main() -> None:
     retried(staging.drop, "dropping the staging")  # left by a stopped run
 
     tiles = seen_tiles(MAX_DIST_M)
-    locator = Locator(args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem)
+    locator = Locator(
+        args.workers,
+        max_waiting=math.inf,
+        worker_mem_gb=args.worker_mem,
+        cache=open_cache(args),
+    )
     pushed = located = 0
     try:
         for found in locate_chunks(locator, tiles, CELL_M, MAX_DIST_M):

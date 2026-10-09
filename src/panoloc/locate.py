@@ -6,7 +6,9 @@
 find_signs slows down much faster than the area grows (26 s for 1 x 0.6 km of
 Strasbourg): the map asks for fixed tiles, located in a pool of processes and kept
 in the `located_tiles` collection. A tile is located again when the algorithm's
-source files change (see fingerprint).
+source files change (see fingerprint). The cache is in MongoDB, next to the
+pictures, or with --cache local in a SQLite file (data/located_tiles.sqlite): the
+pictures are still read from MongoDB, nothing is written to it.
 
 The server answers at once with the cached tiles, and keeps locating the others,
 the last asked first: the map asks again for those still pending.
@@ -24,6 +26,7 @@ import os
 import re
 import resource
 import signal
+import sqlite3
 import sys
 import threading
 import time
@@ -47,11 +50,19 @@ CELL_M = 0.5
 MAX_DIST_M = 45
 TILE_DEG = 0.0025  # ~280 x 185 m in Strasbourg: ~3 s for its busiest streets
 CACHE = "located_tiles"
+# --cache local: the default file
+LOCAL_CACHE = Path("data/located_tiles.sqlite")
+# ids per SQLite query, under its limit of bound variables
+SQL_VARIABLES = 500
 # the code find_signs runs: a change in one of them locates the tiles again
 ALGORITHM = ("annotations.py", "deduplication.py", "geo.py", "triangulation.py")
 PORT = 8765
 # tiles waiting to be located: a long pan over the city drops the oldest ones
 MAX_WAITING = 2000
+# pictures further north or south are left out: the web map's Mercator stops at
+# 85.05, and near a pole a tile's margin spans every longitude (a bad GPS at 90 made
+# the listing of the tiles take all the memory)
+MAX_LAT = 85.0
 # tiles located at once by a fill
 CHUNK_TILES = 2000
 # times a tile is located before it is given up: a worker that crashes (out of
@@ -162,6 +173,8 @@ def seen_tiles(max_m: float = MAX_DIST_M) -> list[Tile]:
     )
     for doc in tqdm(docs, desc="listing the tiles", unit=" pictures", unit_scale=True):
         lon, lat = doc["geometry"]["coordinates"]
+        if not abs(lat) <= MAX_LAT:  # not: NaN too
+            continue
         dlon = dlat / math.cos(math.radians(lat))
         tiles.update(tiles_of(lon - dlon, lat - dlat, lon + dlon, lat + dlat))
     return sorted(tiles)
@@ -180,6 +193,131 @@ def parse_tile(name: str) -> Tile:
 def tile_id(tile: Tile, cell_m: float, max_m: float) -> str:
     # :g: 45 and 45.0 are the same tile
     return f"{tile_name(tile)}:{cell_m:g}:{max_m:g}"
+
+
+class MongoCache:
+    """The located tiles in a collection of the pictures' database."""
+
+    def __init__(self) -> None:
+        self.collection = pictures().database[CACHE]
+
+    def get(self, ids: list[str], current: str) -> dict[str, list[Item]]:
+        """The signs of the tiles located with this code, by id."""
+        docs = self.collection.find(
+            {
+                "_id": {"$in": ids},
+                "fingerprint": current,
+                "signs": {"$exists": True},  # not the first format of the cache
+            }
+        )
+        return {doc["_id"]: doc["signs"] for doc in docs}
+
+    def put(self, id: str, located_with: str, signs: list[Item]) -> None:
+        self.collection.update_one(
+            {"_id": id},
+            {"$set": {"fingerprint": located_with, "signs": signs}},
+            upsert=True,
+        )
+
+    def counts(
+        self, suffix: str, current: str
+    ) -> Iterable[tuple[str, int, float, float]]:
+        """The tiles with a sign whose id ends with suffix, located with this code:
+        their id, signs and the sums of their coordinates."""
+
+        def total(axis: int) -> dict:
+            return {
+                "$sum": {
+                    "$map": {
+                        "input": "$signs",
+                        "in": {"$arrayElemAt": ["$$this.position", axis]},
+                    }
+                }
+            }
+
+        docs = self.collection.aggregate(
+            [
+                {
+                    "$match": {
+                        "_id": {"$regex": re.escape(suffix) + "$"},
+                        "fingerprint": current,
+                        "signs.0": {"$exists": True},
+                    }
+                },
+                {
+                    "$project": {
+                        "n": {"$size": "$signs"},
+                        "lon": total(0),
+                        "lat": total(1),
+                    }
+                },
+            ]
+        )
+        return ((d["_id"], d["n"], d["lon"], d["lat"]) for d in docs)
+
+
+class LocalCache:
+    """The located tiles in a SQLite file, with the counts of MongoCache.counts
+    kept beside the signs."""
+
+    def __init__(self, path: Path = LOCAL_CACHE) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # one connection, shared by the server's and the pool's threads in turn
+        self.db = sqlite3.connect(path, timeout=60, check_same_thread=False)
+        self.lock = threading.Lock()
+        with self.lock, self.db:
+            # WAL: a fill and the server can use the same file at once
+            self.db.execute("PRAGMA journal_mode = WAL")
+            self.db.execute(
+                f"""CREATE TABLE IF NOT EXISTS {CACHE} (
+                    id TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL,
+                    signs TEXT NOT NULL,
+                    n INTEGER NOT NULL,
+                    lon REAL NOT NULL,
+                    lat REAL NOT NULL
+                )"""
+            )
+
+    def get(self, ids: list[str], current: str) -> dict[str, list[Item]]:
+        rows = []
+        with self.lock:
+            for first in range(0, len(ids), SQL_VARIABLES):
+                chunk = ids[first : first + SQL_VARIABLES]
+                rows += self.db.execute(
+                    f"SELECT id, signs FROM {CACHE} WHERE fingerprint = ? "
+                    f"AND id IN ({','.join('?' * len(chunk))})",
+                    [current, *chunk],
+                ).fetchall()
+        # decoded out of the lock: the busiest tiles hold MBs of rays
+        return {id: json.loads(signs) for id, signs in rows}
+
+    def put(self, id: str, located_with: str, signs: list[Item]) -> None:
+        row = (
+            id,
+            located_with,
+            json.dumps(signs),
+            len(signs),
+            sum(s["position"][0] for s in signs),
+            sum(s["position"][1] for s in signs),
+        )
+        with self.lock, self.db:
+            self.db.execute(
+                f"INSERT OR REPLACE INTO {CACHE} VALUES (?, ?, ?, ?, ?, ?)", row
+            )
+
+    def counts(
+        self, suffix: str, current: str
+    ) -> Iterable[tuple[str, int, float, float]]:
+        with self.lock:
+            return self.db.execute(
+                f"SELECT id, n, lon, lat FROM {CACHE} "
+                "WHERE fingerprint = ? AND n > 0 AND substr(id, -?) = ?",
+                (current, len(suffix), suffix),
+            ).fetchall()
+
+
+TileCache = MongoCache | LocalCache
 
 
 def locate_tile(key: Key) -> tuple[str, list[Item]]:
@@ -240,6 +378,7 @@ class Locator:
         workers: int | None = None,
         max_waiting: float = MAX_WAITING,
         worker_mem_gb: float = WORKER_MEM_GB,
+        cache: TileCache | None = None,
     ) -> None:
         self.workers = workers or default_workers(worker_mem_gb)
         self.worker_mem_gb = worker_mem_gb
@@ -248,7 +387,7 @@ class Locator:
             file=sys.stderr,
         )
         self.max_waiting = max_waiting
-        self.cache = pictures().database[CACHE]
+        self.cache = cache or MongoCache()
         self.changed = threading.Condition()  # guards the fields below
         self.waiting: list[Key] = []  # the last asked at the end
         self.running: set[Key] = set()
@@ -267,52 +406,17 @@ class Locator:
 
     def cached(self, keys: Iterable[Key]) -> dict[Key, list[Item]]:
         by_id = {tile_id(*k): k for k in keys}
-        docs = self.cache.find(
-            {
-                "_id": {"$in": list(by_id)},
-                "fingerprint": fingerprint(),
-                "signs": {"$exists": True},  # not the first format of the cache
-            }
-        )
-        return {by_id[doc["_id"]]: doc["signs"] for doc in docs}
+        found = self.cache.get(list(by_id), fingerprint())
+        return {by_id[id]: signs for id, signs in found.items()}
 
     def _load_counts(self, current: str) -> None:
         """The counts of the cached tiles located with this code. Counts lock held."""
         if self.counts_fingerprint == current:
             return
         suffix = tile_id((0, 0), CELL_M, MAX_DIST_M).removeprefix("0:0")
-
-        def total(axis: int) -> dict:
-            return {
-                "$sum": {
-                    "$map": {
-                        "input": "$signs",
-                        "in": {"$arrayElemAt": ["$$this.position", axis]},
-                    }
-                }
-            }
-
-        docs = self.cache.aggregate(
-            [
-                {
-                    "$match": {
-                        "_id": {"$regex": re.escape(suffix) + "$"},
-                        "fingerprint": current,
-                        "signs.0": {"$exists": True},
-                    }
-                },
-                {
-                    "$project": {
-                        "n": {"$size": "$signs"},
-                        "lon": total(0),
-                        "lat": total(1),
-                    }
-                },
-            ]
-        )
         self.tile_counts = {
-            parse_tile(d["_id"].removesuffix(suffix)): (d["n"], d["lon"], d["lat"])
-            for d in docs
+            parse_tile(id.removesuffix(suffix)): (n, lon, lat)
+            for id, n, lon, lat in self.cache.counts(suffix, current)
         }
         self.counts_fingerprint = current
 
@@ -387,11 +491,7 @@ class Locator:
         retry = done = broken = False
         try:
             located_with, signs = future.result()
-            self.cache.update_one(
-                {"_id": tile_id(*key)},
-                {"$set": {"fingerprint": located_with, "signs": signs}},
-                upsert=True,
-            )
+            self.cache.put(tile_id(*key), located_with, signs)
             self._count(key, located_with, signs)
             done = True
         except CancelledError:
@@ -491,9 +591,12 @@ def locate_chunks(
 
 
 def serve(
-    port: int, workers: int | None = None, worker_mem_gb: float = WORKER_MEM_GB
+    port: int,
+    workers: int | None = None,
+    worker_mem_gb: float = WORKER_MEM_GB,
+    cache: TileCache | None = None,
 ) -> None:
-    locator = Locator(workers, worker_mem_gb=worker_mem_gb)
+    locator = Locator(workers, worker_mem_gb=worker_mem_gb, cache=cache)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -578,6 +681,30 @@ def add_worker_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cache_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cache",
+        choices=("db", "local"),
+        default="db",
+        help="where the located tiles are kept: db, the pictures' MongoDB "
+        "(default), or local, a SQLite file (--cache-file)",
+    )
+    parser.add_argument(
+        "--cache-file",
+        type=Path,
+        default=LOCAL_CACHE,
+        help=f"the file of --cache local (default: {LOCAL_CACHE})",
+    )
+
+
+def open_cache(args: argparse.Namespace) -> TileCache:
+    """The cache add_cache_args asked for."""
+    if args.cache == "local":
+        print(f"cache: {args.cache_file}", file=sys.stderr)
+        return LocalCache(args.cache_file)
+    return MongoCache()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
@@ -589,16 +716,20 @@ def main() -> None:
     parser.add_argument("--cell", type=float, default=CELL_M)
     parser.add_argument("--max-dist", type=float, default=MAX_DIST_M)
     add_worker_args(parser)
+    add_cache_args(parser)
     args = parser.parse_args()
+    cache = open_cache(args)
     if args.target == "serve":
-        serve(args.port, args.workers, args.worker_mem)
+        serve(args.port, args.workers, args.worker_mem, cache)
         return
     if args.target:
         west, south, east, north = (float(v) for v in args.target.split(","))
         tiles = tiles_of(west, south, east, north)
     else:
         tiles = seen_tiles(args.max_dist)
-    locator = Locator(args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem)
+    locator = Locator(
+        args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem, cache=cache
+    )
     signs = located = 0
     for found in locate_chunks(locator, tiles, args.cell, args.max_dist):
         signs += sum(map(len, found.values()))

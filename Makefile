@@ -22,6 +22,8 @@ RETRIES      ?= 2
 WORKERS      ?=
 # GB of memory one of those processes may use: a tile needing more is given up, listed as failed
 WORKER_MEM   ?=
+# where `make locate` and `make push-signs` keep the located tiles: db (MongoDB, the default) or local (data/located_tiles.sqlite)
+CACHE        ?=
 # times `make locate` and `make push-signs` start again after a crash: they go on from the cache
 RESTARTS     ?= 20
 
@@ -107,11 +109,11 @@ db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 	docker compose exec -T mongodb sh -c 'mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
 		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(INDEXES_JS)
 
-locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, hours for the world)
-	$(call restarting,uv run python -m panoloc.locate $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)))
+locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, or a local file with CACHE=local; hours for the world)
+	$(call restarting,uv run python -m panoloc.locate $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)) $(if $(CACHE),--cache $(CACHE)))
 
 push-signs: ## Locate the signs of every picture and replace the ones of SIGNS_URI with their type, position and rays
-	$(call restarting,uv run python -m panoloc.push_signs $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)))
+	$(call restarting,uv run python -m panoloc.push_signs $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)) $(if $(CACHE),--cache $(CACHE)))
 
 web-install: ## Install the web app dependencies
 	pnpm --dir web install

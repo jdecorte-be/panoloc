@@ -1,6 +1,13 @@
 import pytest
 
-from panoloc.locate import TILE_DEG, parse_tile, tile_id, tile_name, tiles_of
+from panoloc.locate import (
+    TILE_DEG,
+    LocalCache,
+    parse_tile,
+    tile_id,
+    tile_name,
+    tiles_of,
+)
 
 
 @pytest.mark.parametrize(
@@ -47,3 +54,37 @@ def test_tile_id_ignores_how_numbers_are_written():
 @pytest.mark.parametrize("tile", [(0, 0), (3081, 19433), (-12, 7)])
 def test_tile_name_round_trip(tile):
     assert parse_tile(tile_name(tile)) == tile
+
+
+def sign(lon, lat):
+    return {"sign": "B1", "position": [lon, lat], "rays": []}
+
+
+def test_local_cache_keeps_the_tiles_of_the_current_code(tmp_path):
+    cache = LocalCache(tmp_path / "cache.sqlite")
+    cache.put("1:2:0.5:45", "new", [sign(1.0, 2.0)])
+    cache.put("1:3:0.5:45", "old", [sign(1.0, 3.0)])
+    cache.put("1:4:0.5:45", "new", [sign(0, 0)])
+    cache.put("1:4:0.5:45", "new", [])  # located again
+    ids = ["1:2:0.5:45", "1:3:0.5:45", "1:4:0.5:45", "9:9:0.5:45"]
+    assert cache.get(ids, "new") == {"1:2:0.5:45": [sign(1.0, 2.0)], "1:4:0.5:45": []}
+    # read again from the file
+    assert LocalCache(tmp_path / "cache.sqlite").get(ids, "old") == {
+        "1:3:0.5:45": [sign(1.0, 3.0)]
+    }
+
+
+def test_local_cache_counts_the_tiles_with_signs(tmp_path):
+    cache = LocalCache(tmp_path / "cache.sqlite")
+    cache.put("1:2:0.5:45", "new", [sign(1.0, 2.0), sign(3.0, 4.0)])
+    cache.put("1:3:1:45", "new", [sign(1.0, 3.0)])  # other parameters
+    cache.put("1:4:0.5:45", "new", [])
+    assert list(cache.counts(":0.5:45", "new")) == [("1:2:0.5:45", 2, 4.0, 6.0)]
+
+
+def test_local_cache_gets_more_ids_than_a_query_takes(tmp_path):
+    cache = LocalCache(tmp_path / "cache.sqlite")
+    ids = [f"{i}:0:0.5:45" for i in range(1200)]
+    for id in ids:
+        cache.put(id, "new", [])
+    assert len(cache.get(ids, "new")) == len(ids)
