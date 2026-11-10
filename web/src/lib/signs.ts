@@ -58,24 +58,28 @@ type TileCounts = { tiles: Float64Array; total: number };
 const FIELDS = 5;
 
 const globalForCounts = globalThis as typeof globalThis & {
-  _tileCounts?: { at: number; counts: Promise<TileCounts> };
+  /** the counts last read, and when; the read under way, if any */
+  _tileCounts?: { at: number; counts: Promise<TileCounts>; refreshing?: Promise<TileCounts> };
 };
 
 async function loadTileCounts(): Promise<TileCounts> {
-  const tile = (axis: 0 | 1) => ({
-    $floor: { $divide: [{ $arrayElemAt: ["$location.coordinates", axis] }, TILE_DEG] },
-  });
+  const tile = (axis: 0 | 1) => ({ $floor: { $divide: [{ $arrayElemAt: ["$c", axis] }, TILE_DEG] } });
   const docs = await (await signs())
-    .aggregate<{ _id: { i: number; j: number }; n: number; lon: number; lat: number }>([
-      {
-        $group: {
-          _id: { i: tile(0), j: tile(1) },
-          n: { $sum: 1 },
-          lon: { $sum: { $arrayElemAt: ["$location.coordinates", 0] } },
-          lat: { $sum: { $arrayElemAt: ["$location.coordinates", 1] } },
+    .aggregate<{ _id: { i: number; j: number }; n: number; lon: number; lat: number }>(
+      [
+        // the position alone through the pipeline, not the rays: a lighter $group
+        { $project: { _id: 0, c: "$location.coordinates" } },
+        {
+          $group: {
+            _id: { i: tile(0), j: tile(1) },
+            n: { $sum: 1 },
+            lon: { $sum: { $arrayElemAt: ["$c", 0] } },
+            lat: { $sum: { $arrayElemAt: ["$c", 1] } },
+          },
         },
-      },
-    ])
+      ],
+      { allowDiskUse: true },
+    )
     .toArray();
   // one flat typed array: no string to split, no object per tile on each request
   const tiles = new Float64Array(docs.length * FIELDS);
@@ -87,17 +91,42 @@ async function loadTileCounts(): Promise<TileCounts> {
   return { tiles, total };
 }
 
-/** The counts of signs per tile, of the whole collection: read again every COUNTS_TTL_MS. */
+/**
+ * The counts of signs per tile, of the whole collection. Seconds to read for a
+ * million signs: only the first request of a server waits for them (and not even
+ * it when instrumentation.ts warmed them). Older than COUNTS_TTL_MS, they are still
+ * answered at once while they are read again behind (stale-while-revalidate): the
+ * collection only changes with `make push-signs`.
+ */
 function tileCounts(): Promise<TileCounts> {
   const cached = globalForCounts._tileCounts;
-  if (cached && Date.now() - cached.at < COUNTS_TTL_MS) return cached.counts;
-  const counts = loadTileCounts();
-  globalForCounts._tileCounts = { at: Date.now(), counts };
-  counts.catch(() => {
-    // asked again on the next request
-    if (globalForCounts._tileCounts?.counts === counts) globalForCounts._tileCounts = undefined;
-  });
-  return counts;
+  if (!cached) {
+    const counts = loadTileCounts();
+    globalForCounts._tileCounts = { at: Date.now(), counts };
+    counts.catch(() => {
+      // asked again on the next request
+      if (globalForCounts._tileCounts?.counts === counts) globalForCounts._tileCounts = undefined;
+    });
+    return counts;
+  }
+  if (Date.now() - cached.at >= COUNTS_TTL_MS && !cached.refreshing) {
+    const refreshing = loadTileCounts();
+    cached.refreshing = refreshing;
+    refreshing.then(
+      () => (globalForCounts._tileCounts = { at: Date.now(), counts: refreshing }),
+      (error: unknown) => {
+        // the old counts stay, tried again on a later request
+        console.warn("Could not read the sign counts again:", error);
+        cached.refreshing = undefined;
+      },
+    );
+  }
+  return cached.counts;
+}
+
+/** Start reading the counts: called once when the server starts (instrumentation.ts). */
+export function warmTileCounts(): void {
+  tileCounts().catch((error: unknown) => console.warn("Could not warm the sign counts:", error));
 }
 
 /** The signs of the whole collection, from the counts held in memory. */

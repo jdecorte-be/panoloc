@@ -1,39 +1,38 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Noto_Sans } from "next/font/google";
 import { preconnect } from "react-dom";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// the font of the basemap's labels: the panel reads as part of the map
+const notoSans = Noto_Sans({
+  variable: "--font-noto-sans",
   subsets: ["latin"],
 });
 
+const TITLE = "Panoloc · Traffic signs located from Panoramax pictures";
 const description =
   "Traffic signs detected in Panoramax pictures, drawn where they stand: triangulated from the pictures that see them.";
 
 export const metadata: Metadata = {
   // absolute URLs for the og:image / twitter:image tags
   metadataBase: new URL(process.env.SITE_URL ?? "https://panoloc.jdecorte.com"),
-  title: "panoloc — sign map",
+  title: TITLE,
   description,
   openGraph: {
     type: "website",
-    siteName: "panoloc",
-    title: "panoloc — sign map",
+    siteName: "Panoloc",
+    title: TITLE,
     description,
   },
   twitter: {
     card: "summary_large_image",
-    title: "panoloc — sign map",
+    title: TITLE,
     description,
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
-  ],
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -41,8 +40,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   preconnect("https://tiles.openfreemap.org", { crossOrigin: "anonymous" });
   preconnect("https://api.panoramax.xyz", { crossOrigin: "anonymous" });
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="h-full">{children}</body>
+    <html lang="en" className={`${notoSans.variable} h-full antialiased`}>
+      {/* browser extensions add their classes to <body> before React (Vimium C: vc-init):
+          only this tag's attributes are let differ from the server's */}
+      <body className="h-full" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

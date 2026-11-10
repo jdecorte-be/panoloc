@@ -9,29 +9,26 @@ import {
   type GeoJSONSource,
   GeolocateControl,
   getVersion,
+  type IControl,
   type MapGeoJSONFeature,
   Map as MapLibreMap,
   NavigationControl,
   Popup,
   ScaleControl,
   setWorkerUrl,
+  type StyleSpecification,
 } from "maplibre-gl";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { SignPanel, type MapStatus } from "@/components/sign-panel";
-import { currentBasemap, setBasemapChoice, useBasemap } from "@/lib/basemap-store";
-import { BASEMAPS, type Basemap } from "@/lib/basemaps";
-import { byTier } from "@/lib/counts";
+import basicStyle from "@/lib/basemap/basic-style.json";
 import { boxesOf, signLabel } from "@/lib/labels";
+import { GlassMarkers } from "@/lib/glass-markers";
 import {
-  addBadgeImage,
   addBlankImage,
   addViewConeImage,
-  BADGE,
-  ICON_PREFIX,
   ICON_PX,
-  loadSignImages,
   VIEW_CONE,
 } from "@/lib/sign-images";
 import { MAX_COUNT_SIZE, MAX_TILES, TILE_DEG, tilesOf } from "@/lib/tiles";
@@ -52,21 +49,30 @@ if (typeof window !== "undefined") {
   setWorkerUrl(`/maplibre/maplibre-gl-worker.mjs?v=${getVersion()}`);
 }
 
-const loadPanorama = () => import("@/components/panorama").then((m) => m.Panorama);
+const loadPanorama = () =>
+  import("@/components/panorama").then((m) => m.Panorama);
 // WebGL viewer: browser only, its chunk fetched while the browser is idle
 const Panorama = dynamic(loadPanorama, { ssr: false });
 
-// the first view, without a #zoom/lat/lon in the URL: Europe, whatever the screen
-const INITIAL_BOUNDS: [number, number, number, number] = [-11, 35, 32, 62];
+// the basemap: MapTiler's open-source "Basic" design (BSD / CC-BY 4.0, see
+// lib/basemap/LICENSE.md) on OpenFreeMap's OpenMapTiles vector tiles: no API key
+const BASEMAP = basicStyle as StyleSpecification;
+const STYLE_CREDIT =
+  'Style <a href="https://github.com/openmaptiles/maptiler-basic-gl-style" target="_blank">© MapTiler Basic</a>';
+// the first view, without a #zoom/lat/lon in the URL: Brussels, whatever the screen
+const INITIAL_BOUNDS: [number, number, number, number] = [
+  4.24, 50.76, 4.48, 50.92,
+];
 // the floating panel covers the left of the map from the md breakpoint on
 const PANEL_PX = 360;
 // without it, before the first fit
-const FALLBACK_CENTER: [number, number] = [10, 50];
-const FALLBACK_ZOOM = 3.5;
+const FALLBACK_CENTER: [number, number] = [4.36, 50.845];
+const FALLBACK_ZOOM = 11;
 // read once, before any map writes its own view in the URL (React's dev double
-// mount would take it for a shared view): a shared view wins over Europe
-let fitEurope =
-  typeof window !== "undefined" && !/^#[\d.]+\/-?[\d.]+\/-?[\d.]+/.test(window.location.hash);
+// mount would take it for a shared view): a shared view wins over Brussels
+let fitInitial =
+  typeof window !== "undefined" &&
+  !/^#[\d.]+\/-?[\d.]+\/-?[\d.]+/.test(window.location.hash);
 // below that a view has too many tiles to locate: the signs are counted instead
 const DETAIL_ZOOM = 16;
 // the #n badges of the signs from that zoom on: fewer overlaps
@@ -75,18 +81,19 @@ const LABEL_ZOOM = 18;
 const COUNT_PX = 120;
 // zoom of the inset map around the camera of the 360° view
 const INSET_ZOOM = 18;
-const FADED = 0.25;
 // colors of the Streamlit map (heading_map.py)
 const CURRENT = "rgb(230, 80, 40)"; // the camera of the open picture
 const SEEN = "rgb(255, 140, 0)"; // the signs it sees, orange like its boxes
 const CAMERA = "rgb(100, 116, 139)";
 // the cameras stay in the background: the signs are what the map shows
 const CAMERA_OPACITY = 0.45;
+// the size of every marker: the counts, the discs, the pictograms
+const MARKER_SCALE = 1.25;
 // radius of the disc behind a pictogram, of the dot of a sign without one
-const SIGN_DISC_PX = ICON_PX / 2 + 3;
-const SIGN_DOT_PX = 5;
+const SIGN_DISC_PX = (ICON_PX / 2 + 3) * MARKER_SCALE;
+const SIGN_DOT_PX = 5 * MARKER_SCALE;
 // layers a click on a sign may hit
-const SIGN_LAYERS = ["sign-discs", "sign-icons", "sign-labels"];
+const SIGN_LAYERS = ["sign-discs"];
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 const COMPACT = new Intl.NumberFormat("en", { notation: "compact" });
@@ -99,13 +106,15 @@ function decode(t: TileSign): CachedSign {
   return {
     ...t,
     id: `${t.sign}@${t.position.join(",")}`,
-    rays: t.rays.map(([pictureId, annotationId, lon, lat, bearing, distance]) => ({
-      pictureId,
-      annotationId,
-      camera: [lon, lat],
-      bearing,
-      distance,
-    })),
+    rays: t.rays.map(
+      ([pictureId, annotationId, lon, lat, bearing, distance]) => ({
+        pictureId,
+        annotationId,
+        camera: [lon, lat],
+        bearing,
+        distance,
+      }),
+    ),
   };
 }
 
@@ -146,7 +155,10 @@ function rayLines(signs: LocatedSign[]): FeatureCollection<LineString> {
     features: signs.flatMap((s) =>
       s.rays.map((r) => ({
         type: "Feature" as const,
-        geometry: { type: "LineString" as const, coordinates: [r.camera, s.position] },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [r.camera, s.position],
+        },
         properties: { id: s.id },
       })),
     ),
@@ -156,21 +168,37 @@ function rayLines(signs: LocatedSign[]): FeatureCollection<LineString> {
 /** Tiles per side of a square of counts: a power of two, COUNT_PX wide or so. */
 function countSize(zoom: number): number {
   const deg = (COUNT_PX * 360) / (512 * 2 ** zoom);
-  return Math.min(2 ** Math.max(0, Math.round(Math.log2(deg / TILE_DEG))), MAX_COUNT_SIZE);
+  return Math.min(
+    2 ** Math.max(0, Math.round(Math.log2(deg / TILE_DEG))),
+    MAX_COUNT_SIZE,
+  );
 }
 
+// the borders of the counted circles (GlassMarkers): violet by order of magnitude,
+// light to dark, apart from the basemap's water and the orange of the open picture
+const COUNT_TIERS = [
+  { min: 1, border: "#a78bfa" },
+  { min: 10, border: "#7c3aed" },
+  { min: 100, border: "#5b21b6" },
+  { min: 1000, border: "#3b0764" },
+] as const;
+
+// a circle of at most that many signs: one click shows them
+const FEW_SIGNS = 300;
 // area proportional to the count: 1 sign 10 px, 10 000 signs 34 px
 const COUNT_RADIUS: ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["sqrt", ["get", "count"]],
   1,
-  10,
+  10 * MARKER_SCALE,
   100,
-  34,
+  34 * MARKER_SCALE,
 ];
 
-function countPoints(counts: CountsResponse["counts"]): FeatureCollection<Point> {
+function countPoints(
+  counts: CountsResponse["counts"],
+): FeatureCollection<Point> {
   return {
     type: "FeatureCollection",
     features: counts.map(([lon, lat, count]) => ({
@@ -192,7 +220,12 @@ function cameraPoints(cameras: CameraTuple[]): FeatureCollection<Point> {
   };
 }
 
-const zoomed = (z0: number, v0: number, z1: number, v1: number): ExpressionSpecification => [
+const zoomed = (
+  z0: number,
+  v0: number,
+  z1: number,
+  v1: number,
+): ExpressionSpecification => [
   "interpolate",
   ["linear"],
   ["zoom"],
@@ -203,7 +236,9 @@ const zoomed = (z0: number, v0: number, z1: number, v1: number): ExpressionSpeci
 ];
 
 /** A size at full scale from zoom 18.5, smaller below: no pile of signs at zoom 16. */
-const bySignZoom = (size: ExpressionSpecification | number): ExpressionSpecification => [
+const bySignZoom = (
+  size: ExpressionSpecification | number,
+): ExpressionSpecification => [
   "interpolate",
   ["linear"],
   ["zoom"],
@@ -215,61 +250,28 @@ const bySignZoom = (size: ExpressionSpecification | number): ExpressionSpecifica
   size,
 ];
 const HAS_ICON: ExpressionSpecification = ["has", "icon"];
-// white behind a pictogram, a slate dot without
-const DISC_COLOR: ExpressionSpecification = ["case", HAS_ICON, "#ffffff", "rgb(100, 116, 139)"];
 
-function addLayers(map: MapLibreMap, dark: boolean) {
+function addLayers(map: MapLibreMap) {
   for (const id of ["cameras", "rays", "view"]) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
   // the feature state of a sign follows its id: hover, selection
   map.addSource("signs", { type: "geojson", data: EMPTY, promoteId: "id" });
   map.addSource("counts", { type: "geojson", data: EMPTY, generateId: true });
-  const hovered: ExpressionSpecification = ["boolean", ["feature-state", "hover"], false];
-  const halo = dark ? "#0b0b0f" : "#ffffff";
+  const halo = "#ffffff";
 
-  // zoomed out: the signs counted by squares, the area growing with the count,
-  // the biggest drawn on top
-  map.addLayer({
-    id: "count-halos",
-    type: "circle",
-    source: "counts",
-    maxzoom: DETAIL_ZOOM,
-    layout: { "circle-sort-key": ["get", "count"] },
-    paint: {
-      "circle-radius": ["+", COUNT_RADIUS, ["case", hovered, 10, 6]],
-      "circle-color": byTier("fill"),
-      "circle-opacity": ["case", hovered, 0.4, 0.2],
-      "circle-blur": 0.4,
-    },
-  });
+  // zoomed out: the signs counted by squares, the area growing with the count;
+  // drawn by GlassMarkers, this invisible layer takes the clicks and the hover
   map.addLayer({
     id: "count-circles",
     type: "circle",
     source: "counts",
     maxzoom: DETAIL_ZOOM,
-    layout: { "circle-sort-key": ["get", "count"] },
     paint: {
       "circle-radius": COUNT_RADIUS,
-      "circle-color": byTier("fill"),
-      "circle-stroke-color": halo,
-      "circle-stroke-width": ["case", hovered, 3, 2],
+      "circle-opacity": 0,
+      "circle-stroke-opacity": 0,
     },
-  });
-  map.addLayer({
-    id: "count-labels",
-    type: "symbol",
-    source: "counts",
-    maxzoom: DETAIL_ZOOM,
-    layout: {
-      "text-field": ["get", "label"],
-      "text-font": ["Noto Sans Bold"],
-      "text-size": ["interpolate", ["linear"], ["get", "count"], 1, 11, 1000, 13, 10000, 15],
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-      "symbol-sort-key": ["get", "count"],
-    },
-    paint: { "text-color": byTier("text") },
   });
 
   // zoomed in: the signs themselves
@@ -280,7 +282,7 @@ function addLayers(map: MapLibreMap, dark: boolean) {
     minzoom: DETAIL_ZOOM,
     layout: { visibility: "none", "line-cap": "round" },
     paint: {
-      "line-color": dark ? "rgb(148, 163, 184)" : CAMERA,
+      "line-color": CAMERA,
       "line-width": 1,
       "line-opacity": 0.5,
     },
@@ -301,7 +303,7 @@ function addLayers(map: MapLibreMap, dark: boolean) {
     minzoom: DETAIL_ZOOM,
     paint: {
       "circle-radius": zoomed(DETAIL_ZOOM, 1.6, 19, 3.5),
-      "circle-color": dark ? "rgb(148, 163, 184)" : CAMERA,
+      "circle-color": CAMERA,
       "circle-opacity": CAMERA_OPACITY,
       "circle-stroke-color": halo,
       "circle-stroke-width": zoomed(17.5, 0, 19, 1),
@@ -333,35 +335,8 @@ function addLayers(map: MapLibreMap, dark: boolean) {
       "circle-stroke-width": 2.5,
     },
   });
-  // a soft shadow under each sign: it lifts off any basemap
-  map.addLayer({
-    id: "sign-shadows",
-    type: "circle",
-    source: "signs",
-    minzoom: DETAIL_ZOOM,
-    paint: {
-      "circle-radius": bySignZoom(["case", HAS_ICON, SIGN_DISC_PX + 2, SIGN_DOT_PX + 2]),
-      "circle-color": "#000000",
-      "circle-opacity": 0.28,
-      "circle-blur": 0.7,
-      "circle-translate": [0, 1.5],
-    },
-  });
-  // the selected sign, ringed
-  map.addLayer({
-    id: "sign-selected",
-    type: "circle",
-    source: "signs",
-    minzoom: DETAIL_ZOOM,
-    filter: ["==", ["get", "id"], ""],
-    paint: {
-      "circle-radius": bySignZoom(["case", HAS_ICON, SIGN_DISC_PX + 6, SIGN_DOT_PX + 6]),
-      "circle-color": "rgba(255, 140, 0, 0.18)",
-      "circle-stroke-color": SEEN,
-      "circle-stroke-width": 2.5,
-    },
-  });
-  // a disc behind each pictogram (readable on the map), a dot without
+  // the signs: drawn by GlassMarkers, this invisible layer takes the clicks and
+  // the hover
   map.addLayer({
     id: "sign-discs",
     type: "circle",
@@ -369,85 +344,34 @@ function addLayers(map: MapLibreMap, dark: boolean) {
     minzoom: DETAIL_ZOOM,
     paint: {
       "circle-radius": bySignZoom([
-        "+",
-        ["case", HAS_ICON, SIGN_DISC_PX, SIGN_DOT_PX],
-        ["case", hovered, 3, 0],
+        "case",
+        HAS_ICON,
+        SIGN_DISC_PX,
+        SIGN_DOT_PX,
       ]),
-      // a sign without pictogram: a slate dot, not an empty disc
-      "circle-color": DISC_COLOR,
-      "circle-stroke-color": ["case", hovered, SEEN, HAS_ICON, "rgba(0, 0, 0, 0.18)", "#ffffff"],
-      "circle-stroke-width": ["case", hovered, 2.5, HAS_ICON, 1, 1.5],
+      "circle-opacity": 0,
+      "circle-stroke-opacity": 0,
     },
-  });
-  map.addLayer({
-    id: "sign-icons",
-    type: "symbol",
-    source: "signs",
-    minzoom: DETAIL_ZOOM,
-    filter: ["has", "icon"],
-    layout: {
-      "icon-image": ["concat", ICON_PREFIX, ["get", "icon"]],
-      "icon-size": [
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        DETAIL_ZOOM,
-        0.62,
-        17,
-        0.8,
-        18.5,
-        1,
-      ],
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-    },
-  });
-  // the #n of each sign: a small dark badge at its top right, as on the boxes
-  addBadgeImage(map);
-  map.addLayer({
-    id: "sign-labels",
-    type: "symbol",
-    source: "signs",
-    minzoom: LABEL_ZOOM,
-    layout: {
-      "text-field": ["get", "label"],
-      "text-font": ["Noto Sans Bold"],
-      "text-size": 9.5,
-      "text-anchor": "bottom-left",
-      // its corner on the edge of the disc, like a notification badge
-      "text-offset": ["case", HAS_ICON, ["literal", [1.25, -1.05]], ["literal", [0.6, -0.5]]],
-      "icon-image": BADGE,
-      "icon-text-fit": "both",
-      "icon-text-fit-padding": [0.5, 3.5, 0, 3.5],
-      // the most seen signs keep their badge when they collide
-      "symbol-sort-key": ["-", ["get", "seen"]],
-      "text-padding": 1,
-    },
-    paint: { "text-color": "#ffffff" },
   });
 }
 
-/** The open picture: its camera, the signs it sees, the rays of the selected sign. */
-function highlight(map: MapLibreMap, pictureId: string | null, seen: string[], sign: string | null) {
-  const isSeen: ExpressionSpecification = ["in", ["get", "id"], ["literal", seen]];
-  const isCamera: ExpressionSpecification = ["==", ["get", "pictureId"], pictureId ?? ""];
-  const signOpacity: ExpressionSpecification | number = pictureId
-    ? ["case", isSeen, 1, FADED]
-    : 1;
-  map.setPaintProperty("sign-discs", "circle-color", ["case", isSeen, SEEN, DISC_COLOR]);
-  map.setPaintProperty("sign-discs", "circle-opacity", signOpacity);
-  map.setPaintProperty("sign-discs", "circle-stroke-opacity", signOpacity);
-  map.setPaintProperty("sign-shadows", "circle-opacity", pictureId ? ["case", isSeen, 0.28, 0.08] : 0.28);
-  map.setPaintProperty("sign-icons", "icon-opacity", signOpacity);
-  map.setPaintProperty("sign-labels", "text-opacity", signOpacity);
-  map.setPaintProperty("sign-labels", "icon-opacity", signOpacity);
+/** The open picture: its camera, the rays of the selected sign (the signs: GlassMarkers). */
+function highlight(
+  map: MapLibreMap,
+  pictureId: string | null,
+  sign: string | null,
+) {
+  const isCamera: ExpressionSpecification = [
+    "==",
+    ["get", "pictureId"],
+    pictureId ?? "",
+  ];
   const cameraOpacity: ExpressionSpecification | number = pictureId
     ? ["case", isCamera, 1, CAMERA_OPACITY / 2]
     : CAMERA_OPACITY;
   map.setPaintProperty("cameras", "circle-opacity", cameraOpacity);
   map.setPaintProperty("cameras", "circle-stroke-opacity", cameraOpacity);
   map.setFilter("rays-selected", ["==", ["get", "id"], sign ?? ""]);
-  map.setFilter("sign-selected", ["==", ["get", "id"], sign ?? ""]);
 }
 
 /** Camera of the 360° view on the map, with its view direction when known. */
@@ -470,7 +394,10 @@ function setView(
   });
 }
 
-async function getJson<T extends object>(url: string, signal?: AbortSignal): Promise<T> {
+async function getJson<T extends object>(
+  url: string,
+  signal?: AbortSignal,
+): Promise<T> {
   const res = await fetch(url, { signal });
   const body = (await res.json()) as T | { error: string };
   if ("error" in body) throw new Error(body.error);
@@ -489,21 +416,26 @@ async function fetchTiles<T>(
   onBatch: () => void | Promise<void>,
 ): Promise<void> {
   const batches: string[][] = [];
-  for (let k = 0; k < missing.length; k += MAX_TILES) batches.push(missing.slice(k, k + MAX_TILES));
+  for (let k = 0; k < missing.length; k += MAX_TILES)
+    batches.push(missing.slice(k, k + MAX_TILES));
   await Promise.all(
     batches.map(async (asked) => {
       // sorted: the same tiles, the same URL, a hit of the HTTP cache
       const url = `${endpoint}?tiles=${asked.toSorted().join(",")}`;
       const body = await getJson<{ tiles: Record<string, T> }>(url, signal);
       if (signal.aborted) return;
-      for (const [tile, value] of Object.entries(body.tiles)) store(tile, value);
+      for (const [tile, value] of Object.entries(body.tiles))
+        store(tile, value);
       await onBatch();
     }),
   );
 }
 
 function errorStatus(error: unknown): MapStatus {
-  return { kind: "error", message: error instanceof Error ? error.message : String(error) };
+  return {
+    kind: "error",
+    message: error instanceof Error ? error.message : String(error),
+  };
 }
 
 /** The tooltip of a sign under the pointer: built with the DOM, no HTML injected. */
@@ -518,11 +450,49 @@ function tooltipOf(sign: LocatedSign): HTMLElement {
   return root;
 }
 
+const GITHUB_PATH =
+  "M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3";
+const CODEBERG_PATH =
+  "M11.999.747A11.974 11.974 0 0 0 0 12.75c0 2.254.635 4.465 1.833 6.376L11.837 6.19c.072-.092.251-.092.323 0l4.178 5.402h-2.992l.065.239h3.113l.882 1.138h-3.674l.103.374h3.86l.777 1.003h-4.358l.135.483h4.593l.695.894h-5.038l.165.589h5.326l.609.785h-5.717l.182.65h6.038l.562.727h-6.397l.183.65h6.717A12.003 12.003 0 0 0 24 12.75 11.977 11.977 0 0 0 11.999.747zm3.654 19.104.182.65h5.326c.18-.212.353-.425.513-.65zm.385 1.388.18.65h3.335c.3-.205.596-.419.88-.65zm.383 1.38.182.65h1.821c.47-.19.926-.41 1.367-.65z";
+
+const SOURCE_LINKS = [
+  {
+    title: "Source on GitHub",
+    href: "https://github.com/jdecorte-be/panoloc",
+    path: GITHUB_PATH,
+  },
+  {
+    title: "Source on Codeberg",
+    href: "https://codeberg.org/PierreBorine/panoloc",
+    path: CODEBERG_PATH,
+  },
+];
+
+// links to the source, styled as map buttons so they follow the map into the inset
+class SourceControl implements IControl {
+  private el?: HTMLDivElement;
+
+  onAdd() {
+    const el = document.createElement("div");
+    el.className = "maplibregl-ctrl source-links";
+    el.innerHTML = SOURCE_LINKS.map(
+      ({ title, href, path }) =>
+        `<a href="${href}" target="_blank" rel="noopener noreferrer" title="${title}" aria-label="${title}">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>
+        </a>`,
+    ).join("");
+    this.el = el;
+    return el;
+  }
+
+  onRemove() {
+    this.el?.remove();
+  }
+}
+
 export function SignMap() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  // the basemap the map is drawn with now
-  const appliedRef = useRef<Basemap | null>(null);
   // tile "i:j" -> its signs, its cameras: a tile is asked for once per page load
   const tilesRef = useRef(new Map<string, CachedSign[]>());
   const camerasRef = useRef(new Map<string, CameraTuple[]>());
@@ -539,10 +509,13 @@ export function SignMap() {
   const [total, setTotal] = useState<number | null>(null);
   const [selected, setSelected] = useState<Selection | null>(null);
   const [showRays, setShowRays] = useState(false);
-  const [picture, setPicture] = useState<{ id: string; detections: Detection[] } | null>(null);
+  const glassRef = useRef<GlassMarkers | null>(null);
+  const [picture, setPicture] = useState<{
+    id: string;
+    detections: Detection[];
+  } | null>(null);
   // bumped each time the style is (re)loaded: the layers are new, draw them again
   const [styleEpoch, setStyleEpoch] = useState(0);
-  const basemap = useBasemap();
 
   /** Draw the cached signs of the view, and one tile around: no gap while panning. */
   const render = useCallback(async (map: MapLibreMap) => {
@@ -556,9 +529,17 @@ export function SignMap() {
     const key = near.join(",");
     if (key === drawnRef.current.signs && map.getSource("signs")) return;
     const signs = numbered(near.flatMap((t) => tilesRef.current.get(t)!));
-    await loadSignImages(map, signs.flatMap((s) => (s.icon ? [s.icon] : [])));
     if (mapRef.current !== map) return; // removed meanwhile (React's dev double mount)
     map.getSource<GeoJSONSource>("signs")?.setData(signPoints(signs));
+    glassRef.current?.setSigns(
+      signs.map((s) => ({
+        id: s.id,
+        lngLat: s.position,
+        icon: s.icon ?? undefined,
+        label: `#${s.number}`,
+        seen: s.rays.length,
+      })),
+    );
     drawnRef.current.signs = key;
     locatedRef.current = signs;
     setLocated(signs);
@@ -567,9 +548,12 @@ export function SignMap() {
   /** Draw the cached cameras of the view. */
   const renderCameras = useCallback((map: MapLibreMap) => {
     const b = map.getBounds();
-    const near = tilesOf(b.getWest(), b.getSouth(), b.getEast(), b.getNorth()).filter((t) =>
-      camerasRef.current.has(t),
-    );
+    const near = tilesOf(
+      b.getWest(),
+      b.getSouth(),
+      b.getEast(),
+      b.getNorth(),
+    ).filter((t) => camerasRef.current.has(t));
     const key = near.join(",");
     if (key === drawnRef.current.cameras) return;
     const cameras = near.flatMap((t) => camerasRef.current.get(t)!);
@@ -579,38 +563,56 @@ export function SignMap() {
   }, []);
 
   /** The located signs of the view, counted by squares: nothing is located. */
-  const loadCounts = useCallback(async (map: MapLibreMap, signal: AbortSignal) => {
-    const size = countSize(map.getZoom());
-    // snapped on the squares, one square around: no square cut by the edge of the
-    // view, and the same URL as long as the view stays on the same squares
-    const step = size * TILE_DEG;
-    const b = map.getBounds();
-    const bbox = [
-      Math.max(Math.floor(b.getWest() / step) * step - step, -180),
-      Math.max(Math.floor(b.getSouth() / step) * step - step, -90),
-      Math.min(Math.ceil(b.getEast() / step) * step + step, 180),
-      Math.min(Math.ceil(b.getNorth() / step) * step + step, 90),
-    ];
-    const url = `/api/counts?bbox=${bbox.map((v) => v.toFixed(6)).join(",")}&size=${size}`;
-    try {
-      let counts = countsRef.current.get(url);
-      if (!counts) {
-        counts = (await getJson<CountsResponse>(url, signal)).counts;
-        countsRef.current.set(url, counts);
+  const loadCounts = useCallback(
+    async (map: MapLibreMap, signal: AbortSignal) => {
+      const size = countSize(map.getZoom());
+      // snapped on the squares, one square around: no square cut by the edge of the
+      // view, and the same URL as long as the view stays on the same squares
+      const step = size * TILE_DEG;
+      const b = map.getBounds();
+      const bbox = [
+        Math.max(Math.floor(b.getWest() / step) * step - step, -180),
+        Math.max(Math.floor(b.getSouth() / step) * step - step, -90),
+        Math.min(Math.ceil(b.getEast() / step) * step + step, 180),
+        Math.min(Math.ceil(b.getNorth() / step) * step + step, 90),
+      ];
+      const url = `/api/counts?bbox=${bbox.map((v) => v.toFixed(6)).join(",")}&size=${size}`;
+      try {
+        let counts = countsRef.current.get(url);
+        if (!counts) {
+          counts = (await getJson<CountsResponse>(url, signal)).counts;
+          countsRef.current.set(url, counts);
+        }
+        // removed meanwhile, or the style not loaded yet: "style.load" draws again
+        if (
+          mapRef.current !== map ||
+          signal.aborted ||
+          !map.getSource("counts")
+        )
+          return;
+        if (drawnRef.current.counts !== url) {
+          map.removeFeatureState({ source: "counts" }); // the ids are new: no hover left behind
+          map.getSource<GeoJSONSource>("counts")?.setData(countPoints(counts));
+          glassRef.current?.setCounts(
+            counts.map(([lon, lat, count]) => ({
+              lngLat: [lon, lat],
+              count,
+              label: COMPACT.format(count),
+            })),
+          );
+          drawnRef.current.counts = url;
+        }
+        const inView = counts.filter(([lon, lat]) => b.contains([lon, lat]));
+        setStatus({
+          kind: "counts",
+          signs: inView.reduce((sum, [, , n]) => sum + n, 0),
+        });
+      } catch (error) {
+        if (!signal.aborted) setStatus(errorStatus(error));
       }
-      // removed meanwhile, or another basemap loading: "style.load" draws again
-      if (mapRef.current !== map || signal.aborted || !map.getSource("counts")) return;
-      if (drawnRef.current.counts !== url) {
-        map.removeFeatureState({ source: "counts" }); // the ids are new: no hover left behind
-        map.getSource<GeoJSONSource>("counts")?.setData(countPoints(counts));
-        drawnRef.current.counts = url;
-      }
-      const inView = counts.filter(([lon, lat]) => b.contains([lon, lat]));
-      setStatus({ kind: "counts", signs: inView.reduce((sum, [, , n]) => sum + n, 0) });
-    } catch (error) {
-      if (!signal.aborted) setStatus(errorStatus(error));
-    }
-  }, []);
+    },
+    [],
+  );
 
   const refresh = useCallback(
     async (map: MapLibreMap, signal: AbortSignal) => {
@@ -619,7 +621,12 @@ export function SignMap() {
         return; // the signs already drawn stay, shown again when zooming in
       }
       const b = map.getBounds();
-      const inView = tilesOf(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+      const inView = tilesOf(
+        b.getWest(),
+        b.getSouth(),
+        b.getEast(),
+        b.getNorth(),
+      );
       renderCameras(map);
       await render(map);
 
@@ -627,18 +634,31 @@ export function SignMap() {
       const missingSigns = inView.filter((t) => !tilesRef.current.has(t));
       const missingCameras = inView.filter((t) => !camerasRef.current.has(t));
       if (!missingSigns.length) setStatus({ kind: "ready" });
-      else setStatus({ kind: "locating", pending: missingSigns.length, total: missingSigns.length });
+      else
+        setStatus({
+          kind: "locating",
+          pending: missingSigns.length,
+          total: missingSigns.length,
+        });
 
       try {
         await Promise.all([
           fetchTiles<TileSign[]>(
             "/api/located",
             missingSigns,
-            (tile, tileSigns) => tilesRef.current.set(tile, tileSigns.map(decode)),
+            (tile, tileSigns) =>
+              tilesRef.current.set(tile, tileSigns.map(decode)),
             signal,
             async () => {
-              const pending = missingSigns.filter((t) => !tilesRef.current.has(t)).length;
-              if (pending) setStatus({ kind: "locating", pending, total: missingSigns.length });
+              const pending = missingSigns.filter(
+                (t) => !tilesRef.current.has(t),
+              ).length;
+              if (pending)
+                setStatus({
+                  kind: "locating",
+                  pending,
+                  total: missingSigns.length,
+                });
               await render(map);
             },
           ),
@@ -652,7 +672,8 @@ export function SignMap() {
             },
           ).catch((error) => {
             // the signs can do without them
-            if (!signal.aborted) console.warn("Could not load the cameras:", error);
+            if (!signal.aborted)
+              console.warn("Could not load the cameras:", error);
           }),
         ]);
         if (!signal.aborted) setStatus({ kind: "ready" });
@@ -665,25 +686,38 @@ export function SignMap() {
 
   useEffect(() => {
     if (!container.current) return;
-    const initial = currentBasemap();
-    appliedRef.current = initial;
     const map = new MapLibreMap({
       container: container.current,
-      style: BASEMAPS[initial].style,
+      style: BASEMAP,
       center: FALLBACK_CENTER,
       zoom: FALLBACK_ZOOM,
       hash: true, // the view is kept in the URL: #zoom/lat/lon
-      attributionControl: { compact: true }, // fits the inset map too
+      // fits the inset map too; the design's credit (CC-BY), OpenFreeMap's beside it
+      attributionControl: { compact: true, customAttribution: STYLE_CREDIT },
       fadeDuration: 150, // labels settle faster
       maxPitch: 60,
     });
     mapRef.current = map;
-    map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(
+      new NavigationControl({ visualizePitch: true }),
+      "top-right",
+    );
     map.addControl(
       new GeolocateControl({ positionOptions: { enableHighAccuracy: true } }),
       "top-right",
     );
     map.addControl(new ScaleControl({}), "bottom-right");
+    map.addControl(new SourceControl(), "bottom-right");
+    const glass = new GlassMarkers(map, {
+      scale: MARKER_SCALE,
+      detailZoom: DETAIL_ZOOM,
+      labelZoom: LABEL_ZOOM,
+      discPx: SIGN_DISC_PX,
+      dotPx: SIGN_DOT_PX,
+      iconPx: ICON_PX * MARKER_SCALE,
+      tiers: COUNT_TIERS,
+    });
+    glassRef.current = glass;
 
     let controller = new AbortController();
     const reload = () => {
@@ -694,13 +728,13 @@ export function SignMap() {
 
     // the icons the basemap's sprite lacks: drawn as nothing, no warning each
     map.setMissingStyleImageResolver((id) => addBlankImage(map, id));
-    // the first style, and each basemap change: the layers of the map on top of it
+    // the style loaded: the layers of the map on top of it
     map.on("style.load", () => {
-      addLayers(map, appliedRef.current === "dark");
+      addLayers(map);
       drawnRef.current = { signs: "", cameras: "", counts: "" };
-      if (fitEurope) {
+      if (fitInitial) {
         // fitted once the container has its final size, not while the page lays out
-        fitEurope = false;
+        fitInitial = false;
         map.resize();
         map.fitBounds(INITIAL_BOUNDS, {
           duration: 0,
@@ -726,6 +760,8 @@ export function SignMap() {
         focus: ray.annotationId ?? undefined,
         sign: sign.id,
       });
+      // the rays shown with it: which pictures see the sign, from where
+      setShowRays(true);
     };
     for (const layer of SIGN_LAYERS) {
       map.on("click", layer, (e) => {
@@ -746,36 +782,56 @@ export function SignMap() {
     const hoverSign = (id: string | undefined) => {
       if (id === hoveredSign) return;
       if (hoveredSign !== undefined && map.getSource("signs")) {
-        map.setFeatureState({ source: "signs", id: hoveredSign }, { hover: false });
+        map.setFeatureState(
+          { source: "signs", id: hoveredSign },
+          { hover: false },
+        );
       }
       hoveredSign = id;
-      const sign = id === undefined ? undefined : locatedRef.current.find((s) => s.id === id);
+      glass.hoverSign(id);
+      const sign =
+        id === undefined
+          ? undefined
+          : locatedRef.current.find((s) => s.id === id);
       if (!sign || id === undefined) {
         tooltip.remove();
         return;
       }
       map.setFeatureState({ source: "signs", id }, { hover: true });
-      tooltip.setLngLat(sign.position).setDOMContent(tooltipOf(sign)).addTo(map);
+      tooltip
+        .setLngLat(sign.position)
+        .setDOMContent(tooltipOf(sign))
+        .addTo(map);
     };
-    map.on("mousemove", "sign-discs", (e) => hoverSign(e.features?.[0]?.properties.id as string));
+    map.on("mousemove", "sign-discs", (e) =>
+      hoverSign(e.features?.[0]?.properties.id as string),
+    );
     map.on("mouseleave", "sign-discs", () => hoverSign(undefined));
     map.on("movestart", () => hoverSign(undefined));
 
-    // a square of counts -> zoomed in on it
+    // a circle of counts -> zoomed in on it: a few hundred signs, straight to them;
+    // more, a big step (Europe -> the signs in three clicks, not five)
     map.on("click", "count-circles", (e) => {
-      const point = e.features?.[0]?.geometry as Point | undefined;
-      if (!point) return;
+      const feature = e.features?.[0];
+      const point = feature?.geometry as Point | undefined;
+      if (!feature || !point) return;
+      const few = Number(feature.properties.count) <= FEW_SIGNS;
       map.easeTo({
         center: point.coordinates as [number, number],
-        zoom: Math.min(map.getZoom() + 3, DETAIL_ZOOM + 1),
+        zoom: few
+          ? DETAIL_ZOOM + 1
+          : Math.min(map.getZoom() + 5, DETAIL_ZOOM + 1),
       });
     });
     // the square under the pointer stands out
     let hover: number | string | undefined;
     const setHover = (id: number | string | undefined) => {
-      if (hover !== undefined) map.setFeatureState({ source: "counts", id: hover }, { hover: false });
+      if (hover !== undefined)
+        map.setFeatureState({ source: "counts", id: hover }, { hover: false });
       hover = id;
-      if (id !== undefined) map.setFeatureState({ source: "counts", id }, { hover: true });
+      glass.hoverCount(id === undefined ? undefined : Number(id));
+      if (id !== undefined)
+        map.setFeatureState({ source: "counts", id }, { hover: true });
     };
     map.on("mousemove", "count-circles", (e) => setHover(e.features?.[0]?.id));
     map.on("mouseleave", "count-circles", () => setHover(undefined));
@@ -789,13 +845,19 @@ export function SignMap() {
       });
     });
     for (const layer of [...SIGN_LAYERS, "cameras", "count-circles"]) {
-      map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on(
+        "mouseenter",
+        layer,
+        () => (map.getCanvas().style.cursor = "pointer"),
+      );
       map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
     }
 
     return () => {
       controller.abort();
       tooltip.remove();
+      glass.remove();
+      glassRef.current = null;
       const { hash } = window.location;
       map.remove(); // also clears the #zoom/lat/lon of the URL
       // put it back: React's dev double mount then starts from the same view
@@ -803,15 +865,6 @@ export function SignMap() {
       mapRef.current = null;
     };
   }, [refresh]);
-
-  // another basemap: the style is replaced, "style.load" puts the layers back
-  useEffect(() => {
-    const map = mapRef.current;
-    // the hydration render holds the server's "light": only the browser's value counts
-    if (!map || appliedRef.current === basemap || basemap !== currentBasemap()) return;
-    appliedRef.current = basemap;
-    map.setStyle(BASEMAPS[basemap].style, { diff: false });
-  }, [basemap]);
 
   // the 360° viewer's code, fetched before the first click
   useEffect(() => {
@@ -832,14 +885,21 @@ export function SignMap() {
   useEffect(() => {
     if (!pictureId) return;
     const controller = new AbortController();
-    getJson<{ detections: Detection[] }>(`/api/pictures/${pictureId}`, controller.signal)
-      .then((body) => setPicture({ id: pictureId, detections: body.detections }))
+    getJson<{ detections: Detection[] }>(
+      `/api/pictures/${pictureId}`,
+      controller.signal,
+    )
+      .then((body) =>
+        setPicture({ id: pictureId, detections: body.detections }),
+      )
       .catch((error) => {
-        if (!controller.signal.aborted) console.warn("Could not load the picture:", error);
+        if (!controller.signal.aborted)
+          console.warn("Could not load the picture:", error);
       });
     return () => controller.abort();
   }, [pictureId]);
-  const detections = picture?.id === pictureId ? picture.detections : NO_DETECTIONS;
+  const detections =
+    picture?.id === pictureId ? picture.detections : NO_DETECTIONS;
 
   const boxes = useMemo(
     () => (pictureId ? boxesOf(pictureId, detections, located) : []),
@@ -850,7 +910,10 @@ export function SignMap() {
     [boxes],
   );
   const seen = useMemo(
-    () => located.filter((s) => s.rays.some((r) => r.pictureId === pictureId)).map((s) => s.id),
+    () =>
+      located
+        .filter((s) => s.rays.some((r) => r.pictureId === pictureId))
+        .map((s) => s.id),
     [located, pictureId],
   );
 
@@ -860,7 +923,8 @@ export function SignMap() {
     getJson<TotalResponse>("/api/total", controller.signal)
       .then((body) => setTotal(body.total))
       .catch((error) => {
-        if (!controller.signal.aborted) console.warn("Could not count the signs:", error);
+        if (!controller.signal.aborted)
+          console.warn("Could not count the signs:", error);
       });
     return () => controller.abort();
   }, []);
@@ -877,12 +941,17 @@ export function SignMap() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (map && position) map.easeTo({ center: position, zoom: Math.max(map.getZoom(), INSET_ZOOM) });
+    if (map && position)
+      map.easeTo({
+        center: position,
+        zoom: Math.max(map.getZoom(), INSET_ZOOM),
+      });
   }, [pictureId, position]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (map?.getLayer("sign-discs")) highlight(map, pictureId, seen, signId);
+    if (map?.getLayer("sign-discs")) highlight(map, pictureId, signId);
+    glassRef.current?.highlight(pictureId, seen, signId);
   }, [pictureId, seen, signId, styleEpoch]);
 
   // rays: all of them only when asked for, else those of the selected sign
@@ -904,7 +973,8 @@ export function SignMap() {
   const onBearing = useCallback(
     (bearing: number | null) => {
       bearingRef.current = bearing;
-      if (mapRef.current?.getSource("view") && position) setView(mapRef.current, position, bearing);
+      if (mapRef.current?.getSource("view") && position)
+        setView(mapRef.current, position, bearing);
     },
     [position],
   );
@@ -936,7 +1006,9 @@ export function SignMap() {
 
   const busy = status.kind === "loading" || status.kind === "locating";
   const progress =
-    status.kind === "locating" ? 1 - status.pending / Math.max(status.total, 1) : null;
+    status.kind === "locating"
+      ? 1 - status.pending / Math.max(status.total, 1)
+      : null;
 
   return (
     // phones: the panel below the map; wider screens: floating over it
@@ -956,7 +1028,7 @@ export function SignMap() {
           className={
             selected
               ? // above the navbar of the 360° view, smaller on phones
-                "map-inset absolute right-2 bottom-12 z-10 h-[min(16rem,35%)] w-[min(24rem,50%)] overflow-hidden rounded-xl shadow-2xl ring-2 ring-white/90 md:right-4 md:bottom-14 md:h-[min(16rem,40%)] md:w-[min(24rem,calc(100%-2rem))]"
+                "map-inset absolute right-2 bottom-12 z-10 h-[min(16rem,35%)] w-[min(24rem,50%)] overflow-hidden rounded shadow-lg ring-1 ring-black/20 md:right-4 md:bottom-14 md:h-[min(16rem,40%)] md:w-[min(24rem,calc(100%-2rem))]"
               : "absolute inset-0"
           }
         >
@@ -971,10 +1043,10 @@ export function SignMap() {
             aria-hidden
           >
             {progress === null ? (
-              <div className="loading-bar h-full w-1/3 bg-accent" />
+              <div className="loading-bar h-full w-1/3 bg-accent-soft" />
             ) : (
               <div
-                className="h-full bg-accent transition-[width] duration-300"
+                className="h-full bg-accent-soft transition-[width] duration-300"
                 style={{ width: `${Math.max(progress, 0.08) * 100}%` }}
               />
             )}
@@ -983,7 +1055,7 @@ export function SignMap() {
             <button
               type="button"
               onClick={onClose}
-              className="absolute top-2 left-2 rounded-md bg-surface px-2 py-1 text-xs font-medium shadow-md backdrop-blur hover:bg-background"
+              className="absolute top-2 left-2 rounded border border-line bg-surface px-2 py-1 text-xs shadow-sm hover:bg-line/40"
             >
               ⤢ Full map
             </button>
@@ -1002,8 +1074,6 @@ export function SignMap() {
         onFocus={onFocus}
         onPicture={onPicture}
         onClose={onClose}
-        basemap={basemap}
-        onBasemap={setBasemapChoice}
       />
     </div>
   );

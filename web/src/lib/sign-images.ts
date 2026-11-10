@@ -19,7 +19,8 @@ async function addSignImage(map: MapLibreMap, key: string): Promise<void> {
     img.src = `/signs/${encodeURIComponent(key)}.svg`;
     await img.decode();
 
-    const ratio = window.devicePixelRatio || 1;
+    // twice the screen's ratio: still sharp when the map draws them bigger
+    const ratio = (window.devicePixelRatio || 1) * 2;
     const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
     // fit in the square: wide sub-panels get shorter
     const width = Math.round(ICON_PX * ratio * Math.min(aspect, 1));

@@ -1,12 +1,14 @@
 @import "tailwindcss";
 
 :root {
+  /* the warm grays of the basemap (MapTiler Basic), its labels' ink */
   --background: #ffffff;
-  --foreground: #18181b;
-  --surface: rgb(255 255 255 / 0.86);
-  --muted: #5f6368;
-  --line: #e4e4e7;
-  --accent: #1d6fd6;
+  --foreground: #2e2b27;
+  --surface: #ffffff;
+  --muted: #6f685f;
+  --line: #e2dbd0;
+  --accent: #2a6496; /* links: dark enough to read */
+  --accent-soft: #86c8f2; /* the second color, light blue: fills, the counted circles */
   color-scheme: light;
 }
 
@@ -17,20 +19,9 @@
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-noto-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0b;
-    --foreground: #ededed;
-    --surface: rgb(24 24 27 / 0.82);
-    --muted: #a1a1aa;
-    --line: #3f3f46;
-    --accent: #6aa8ff;
-    color-scheme: dark;
-  }
 }
 
 body {
@@ -39,39 +30,133 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* the floating panel: a hairline border that works on any basemap */
 .panel {
-  border-color: color-mix(in srgb, var(--line) 70%, transparent);
   scrollbar-width: thin;
 }
 
-/* MapLibre's controls, in the colors of the page */
+/* MapLibre's controls, like the panel */
 .maplibregl-ctrl-group {
-  border-radius: 10px !important;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18) !important;
   overflow: hidden;
 }
-@media (prefers-color-scheme: dark) {
-  .maplibregl-ctrl-group {
-    background: #27272a !important;
-  }
-  .maplibregl-ctrl-group button + button {
-    border-top-color: #3f3f46 !important;
-  }
-  .maplibregl-ctrl-group .maplibregl-ctrl-icon {
-    filter: invert(1);
-  }
-  .maplibregl-ctrl-attrib,
-  .maplibregl-ctrl-scale {
-    background: rgb(24 24 27 / 0.75) !important;
-    color: #d4d4d8 !important;
-  }
-  .maplibregl-ctrl-attrib a {
-    color: #e4e4e7 !important;
-  }
-  .maplibregl-ctrl-attrib-button {
-    filter: invert(1);
-  }
+/* the links to the source: frosted glass over the map */
+.source-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.source-links a {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  background: rgb(255 255 255 / 0.55);
+  color: var(--foreground);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+  transition:
+    background-color 150ms,
+    transform 150ms,
+    box-shadow 150ms;
+}
+.source-links a:hover {
+  background: rgb(255 255 255 / 0.8);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+  transform: translateY(-1px);
+}
+.source-links a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* the markers: a gaussian blur of the map under them, a violet border, no fill */
+.glass-markers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.glass {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid #7c3aed;
+  background: transparent;
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  box-shadow: 0 2px 8px rgb(46 16 101 / 0.18);
+  will-change: transform;
+  transition:
+    scale 120ms,
+    opacity 150ms,
+    border-color 120ms;
+}
+.glass-count {
+  border-width: 2.5px;
+  color: #2e1065;
+  font:
+    700 12px/1 var(--font-sans),
+    system-ui,
+    sans-serif;
+  text-shadow:
+    0 0 3px rgb(255 255 255 / 0.9),
+    0 0 6px rgb(255 255 255 / 0.7);
+}
+.glass-count.hover {
+  scale: 1.08;
+  border-width: 3.5px;
+}
+.glass-sign {
+  width: calc(var(--d) * var(--s, 1));
+  height: calc(var(--d) * var(--s, 1));
+}
+.glass-sign img {
+  object-fit: contain;
+}
+.glass-sign.hover {
+  scale: 1.2;
+  border-color: rgb(255 140 0);
+  border-width: 2.5px;
+}
+.glass-sign.seen {
+  border-color: rgb(255 140 0);
+  background: rgb(255 140 0 / 0.25);
+}
+.glass-sign.faded {
+  opacity: 0.25;
+}
+.glass-sign.selected {
+  outline: 2.5px solid rgb(255 140 0);
+  outline-offset: 3px;
+}
+/* the #n of each sign, at its top right, from close enough */
+.glass-badge {
+  position: absolute;
+  bottom: 70%;
+  left: 70%;
+  display: none;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: #18181b;
+  color: #fff;
+  font:
+    700 9.5px/1.3 var(--font-sans),
+    system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+.glass-markers.badges .glass-badge {
+  display: block;
 }
 
 /* the inset map beside the 360° view: no zoom buttons, no geolocation */
@@ -91,7 +176,10 @@ body {
   border-radius: 8px;
   background: #18181b;
   color: #fafafa;
-  font: 500 12px/1.35 var(--font-sans), system-ui, sans-serif;
+  font:
+    500 12px/1.35 var(--font-sans),
+    system-ui,
+    sans-serif;
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
 }
 .sign-tooltip .maplibregl-popup-content span {

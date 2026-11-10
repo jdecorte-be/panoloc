@@ -2,6 +2,7 @@
 SHELL        := /bin/bash
 POPULATE_SQL ?= sql/populate.sql
 INDEXES_JS   ?= sql/indexes.js
+FAKE_JS      ?= sql/fake-data.js
 # draws the progress bar of `make populate`
 PROGRESS_AWK ?= sql/progress.awk
 # the lines of mongoimport hidden under the bar: its connection, its own progress, a summary without failures
@@ -38,7 +39,7 @@ define restarting
 	done
 endef
 
-.PHONY: help install run test lint format db-up db-down db-logs db-shell db-reset db-index populate locate push-signs web-install web-dev clean
+.PHONY: help install run test lint format db-up db-down db-logs db-shell db-reset db-index db-fake db-fake-clear populate locate push-signs web-install web-dev clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -108,6 +109,16 @@ populate: db-up ## Stream the DuckDB query into MongoDB, BATCH_ROWS parquet rows
 db-index: ## Create the MongoDB indexes (geospatial one used by the web map)
 	docker compose exec -T mongodb sh -c 'mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
 		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(INDEXES_JS)
+
+db-fake: db-up ## Fill MongoDB with fake pictures and signs for the web map (marked fake: real data stays)
+	docker compose exec -T mongodb sh -c 'mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
+		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" --file /dev/stdin' < $(FAKE_JS)
+	@echo "Restart make web-dev: it keeps the sign counts 10 minutes."
+
+db-fake-clear: db-up ## Remove the fake pictures and signs of make db-fake (only them)
+	docker compose exec -T mongodb sh -c 'mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" \
+		--authenticationDatabase admin "$$MONGO_INITDB_DATABASE" \
+		--eval "printjson({ pictures: db.pictures.deleteMany({ fake: true }).deletedCount, signs: db.signs.deleteMany({ fake: true }).deletedCount })"'
 
 locate: ## Locate the signs of every picture ahead of the web map (cached in MongoDB, or a local file with CACHE=local; hours for the world)
 	$(call restarting,uv run python -m panoloc.locate $(if $(WORKERS),--workers $(WORKERS)) $(if $(WORKER_MEM),--worker-mem $(WORKER_MEM)) $(if $(CACHE),--cache $(CACHE)))

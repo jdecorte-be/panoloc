@@ -33,6 +33,18 @@ cp web/.env.example web/.env.local
 make web-dev       # http://localhost:3000
 ```
 
+No pictures nor located signs yet? Fake ones are enough to work on the map:
+
+```sh
+make db-fake        # ~2,800 pictures and ~10,600 signs: Strasbourg's streets, a few European cities
+make web-install
+cp web/.env.example web/.env.local
+make web-dev
+make db-fake-clear  # removes them, and only them (marked fake: true)
+```
+
+The fake pictures do not exist on Panoramax: their 360° view does not load.
+
 If the collection was imported before `db-index` existed, run `make db-index`
 once: without the 2dsphere index every map move scans the whole collection.
 
@@ -56,7 +68,6 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `src/app/api/cameras/route.ts` | `GET /api/cameras?tiles=i:j,…`: the cameras of these tiles, `[id, lon, lat]` |
 | `src/app/api/pictures/[id]/route.ts` | `GET /api/pictures/<id>`: the signs detected in one picture, by box |
 | `src/components/sign-map.tsx` | MapLibre map: clusters, pictograms; full screen, or inset beside the 360° view |
-| `src/lib/basemaps.ts` | The basemaps to pick from |
 | `src/lib/http.ts` | `Cache-Control` of the API, the in-memory cache of the server |
 | `src/components/panorama.tsx` | 360° view ([Photo Sphere Viewer](https://photo-sphere-viewer.js.org/)) with the annotation boxes |
 | `src/lib/panoramax.ts` | Picture metadata from the Panoramax API, annotation pixels -> view angles |
@@ -68,4 +79,4 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `scripts/copy-signs.mjs` | Copies `src/panoloc/frontend/assets/signs` to `public/signs` before `dev` / `build` |
 | `scripts/copy-maplibre-worker.mjs` | Copies MapLibre's web worker to `public/maplibre` before `dev` / `build` (maplibre-gl 6 is ESM only: the bundle loses it) |
 
-The basemaps are [OpenFreeMap](https://openfreemap.org/)'s vector styles (Light, Dark, Streets), or the standard [OpenStreetMap](https://www.openstreetmap.org/) tiles (OSM), all without an API key. The viewer's pick is kept in the browser; by default the map follows the system's light or dark mode.
+The basemap is MapTiler's open-source [Basic](https://github.com/openmaptiles/maptiler-basic-gl-style) design (`src/lib/basemap/`, BSD / CC-BY 4.0, credited on the map) drawn from [OpenFreeMap](https://openfreemap.org/)'s vector tiles: [OpenStreetMap](https://www.openstreetmap.org/) data, no API key.
