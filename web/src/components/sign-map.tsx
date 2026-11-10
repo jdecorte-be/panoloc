@@ -59,17 +59,17 @@ const Panorama = dynamic(loadPanorama, { ssr: false });
 const BASEMAP = basicStyle as StyleSpecification;
 const STYLE_CREDIT =
   'Style <a href="https://github.com/openmaptiles/maptiler-basic-gl-style" target="_blank">© MapTiler Basic</a>';
-// the first view, without a #zoom/lat/lon in the URL: Brussels, whatever the screen
+// the first view, without a #zoom/lat/lon in the URL: Paris, whatever the screen
 const INITIAL_BOUNDS: [number, number, number, number] = [
-  4.24, 50.76, 4.48, 50.92,
+  2.22, 48.815, 2.47, 48.905,
 ];
 // the floating panel covers the left of the map from the md breakpoint on
 const PANEL_PX = 360;
 // without it, before the first fit
-const FALLBACK_CENTER: [number, number] = [4.36, 50.845];
+const FALLBACK_CENTER: [number, number] = [2.35, 48.86];
 const FALLBACK_ZOOM = 11;
 // read once, before any map writes its own view in the URL (React's dev double
-// mount would take it for a shared view): a shared view wins over Brussels
+// mount would take it for a shared view): a shared view wins over Paris
 let fitInitial =
   typeof window !== "undefined" &&
   !/^#[\d.]+\/-?[\d.]+\/-?[\d.]+/.test(window.location.hash);
