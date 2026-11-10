@@ -9,11 +9,12 @@ export interface Detection {
   name: string;
 }
 
+/** [picture id, lon, lat] of a picture with a traffic sign. */
+export type CameraTuple = [string, number, number];
+
 export interface CamerasResponse {
-  /** [picture id, lon, lat] of the pictures with a traffic sign */
-  cameras: [string, number, number][];
-  /** more pictures matched than the response holds */
-  truncated: boolean;
+  /** tile "i:j" -> its pictures with a traffic sign, for every tile asked */
+  tiles: Record<string, CameraTuple[]>;
 }
 
 /** A picture that sees a located sign: its camera and the box of the sign. */

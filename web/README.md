@@ -11,10 +11,11 @@ dots are the cameras; "Show the rays" draws the rays find_signs kept.
 `/api/located` and `/api/counts` read the `signs` collection that
 `make push-signs` fills (`src/panoloc/push_signs.py`: type, position and rays):
 nothing is located while the map is open, run `make push-signs` again after an
-algorithm change. The map asks for fixed tiles of 0.0025° (~280 x 185 m), and the
-browser keeps the tiles it got: panning back costs no request. Zoomed out, the
-signs are counted per tile, held in memory by the server and read again every
-10 minutes.
+algorithm change. The map asks for fixed tiles of 0.0025° (~280 x 185 m), signs and
+cameras alike, and the browser keeps the tiles it got: panning back costs no request.
+The server keeps the tiles it read in memory too, and zoomed out it counts the signs
+per tile from memory; both are read again every 10 minutes. The API answers are
+cacheable for 5 minutes (`Cache-Control`), so a CDN in front can serve them.
 
 The 360° view shows the `sd` picture at once, then the original one (`hd`, 5760 px
 wide for a GoPro Max) in its place once downloaded.
@@ -52,9 +53,11 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `src/app/api/located/route.ts` | `GET /api/located?tiles=i:j,…`: the located signs of these tiles, from `signs` |
 | `src/app/api/counts/route.ts` | `GET /api/counts?bbox=w,s,e,n&size=n`: the signs counted by squares of n x n tiles |
 | `src/lib/signs.ts` | The queries of the `signs` collection, and its counts per tile held in memory |
-| `src/app/api/cameras/route.ts` | `GET /api/cameras?bbox=w,s,e,n`: the cameras, `[id, lon, lat]` |
+| `src/app/api/cameras/route.ts` | `GET /api/cameras?tiles=i:j,…`: the cameras of these tiles, `[id, lon, lat]` |
 | `src/app/api/pictures/[id]/route.ts` | `GET /api/pictures/<id>`: the signs detected in one picture, by box |
 | `src/components/sign-map.tsx` | MapLibre map: clusters, pictograms; full screen, or inset beside the 360° view |
+| `src/lib/basemaps.ts` | The basemaps to pick from |
+| `src/lib/http.ts` | `Cache-Control` of the API, the in-memory cache of the server |
 | `src/components/panorama.tsx` | 360° view ([Photo Sphere Viewer](https://photo-sphere-viewer.js.org/)) with the annotation boxes |
 | `src/lib/panoramax.ts` | Picture metadata from the Panoramax API, annotation pixels -> view angles |
 | `src/components/sign-panel.tsx` | Status, legend of the signs in view, signs of the open picture |
@@ -64,4 +67,4 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `src/lib/sign-images.ts` | Rasterizes the SVG pictograms for MapLibre |
 | `scripts/copy-signs.mjs` | Copies `src/panoloc/frontend/assets/signs` to `public/signs` before `dev` / `build` |
 
-The basemap is the standard [OpenStreetMap](https://www.openstreetmap.org/) tiles (no API key), the label fonts from [OpenFreeMap](https://openfreemap.org/).
+The basemaps are [OpenFreeMap](https://openfreemap.org/)'s vector styles (Light, Dark, Streets), or the standard [OpenStreetMap](https://www.openstreetmap.org/) tiles (OSM), all without an API key. The viewer's pick is kept in the browser; by default the map follows the system's light or dark mode.

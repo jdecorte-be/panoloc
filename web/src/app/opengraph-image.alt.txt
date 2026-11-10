@@ -1,0 +1,1 @@
+Map of traffic signs located by panoloc, with the camera rays that found them

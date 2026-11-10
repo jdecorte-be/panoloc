@@ -2,11 +2,12 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-  --surface: rgb(255 255 255 / 0.94);
+  --foreground: #18181b;
+  --surface: rgb(255 255 255 / 0.86);
   --muted: #5f6368;
   --line: #e4e4e7;
   --accent: #1d6fd6;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -17,17 +18,18 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #0a0a0b;
     --foreground: #ededed;
-    --surface: rgb(24 24 27 / 0.94);
+    --surface: rgb(24 24 27 / 0.82);
     --muted: #a1a1aa;
     --line: #3f3f46;
     --accent: #6aa8ff;
+    color-scheme: dark;
   }
 }
 
@@ -35,4 +37,97 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* the floating panel: a hairline border that works on any basemap */
+.panel {
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  scrollbar-width: thin;
+}
+
+/* MapLibre's controls, in the colors of the page */
+.maplibregl-ctrl-group {
+  border-radius: 10px !important;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14) !important;
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  .maplibregl-ctrl-group {
+    background: #27272a !important;
+  }
+  .maplibregl-ctrl-group button + button {
+    border-top-color: #3f3f46 !important;
+  }
+  .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+    filter: invert(1);
+  }
+  .maplibregl-ctrl-attrib,
+  .maplibregl-ctrl-scale {
+    background: rgb(24 24 27 / 0.75) !important;
+    color: #d4d4d8 !important;
+  }
+  .maplibregl-ctrl-attrib a {
+    color: #e4e4e7 !important;
+  }
+  .maplibregl-ctrl-attrib-button {
+    filter: invert(1);
+  }
+}
+
+/* the inset map beside the 360° view: no zoom buttons, no geolocation */
+.map-inset .maplibregl-ctrl-top-right {
+  display: none;
+}
+
+/* the name of the sign under the pointer */
+.sign-tooltip {
+  pointer-events: none;
+}
+.sign-tooltip .maplibregl-popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #18181b;
+  color: #fafafa;
+  font: 500 12px/1.35 var(--font-sans), system-ui, sans-serif;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+.sign-tooltip .maplibregl-popup-content span {
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 400;
+}
+.sign-tooltip.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: #18181b;
+}
+.sign-tooltip.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: #18181b;
+}
+.sign-tooltip.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: #18181b;
+}
+.sign-tooltip.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: #18181b;
+}
+
+/* the tiles being asked for, how many unknown: a bar sweeping the top edge */
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.loading-bar {
+  animation: sweep 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
 }
