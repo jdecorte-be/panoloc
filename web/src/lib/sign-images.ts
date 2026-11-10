@@ -19,7 +19,8 @@ async function addSignImage(map: MapLibreMap, key: string): Promise<void> {
     img.src = `/signs/${encodeURIComponent(key)}.svg`;
     await img.decode();
 
-    const ratio = window.devicePixelRatio || 1;
+    // twice the screen's ratio: still sharp when the map draws them bigger
+    const ratio = (window.devicePixelRatio || 1) * 2;
     const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
     // fit in the square: wide sub-panels get shorter
     const width = Math.round(ICON_PX * ratio * Math.min(aspect, 1));
@@ -82,4 +83,36 @@ export function addViewConeImage(map: MapLibreMap): void {
   ctx.closePath();
   ctx.fill();
   map.addImage(VIEW_CONE, ctx.getImageData(0, 0, side, side), { pixelRatio: ratio });
+}
+
+export const BADGE = "sign-badge";
+const BADGE_PX = 12; // the smallest badge: it stretches with its text
+const BADGE_RADIUS = 6;
+
+/** A dark pill behind the #n of a sign: stretched around its text (icon-text-fit). */
+export function addBadgeImage(map: MapLibreMap): void {
+  if (map.hasImage(BADGE)) return;
+  const ratio = window.devicePixelRatio || 1;
+  const side = Math.round(BADGE_PX * ratio);
+  const r = BADGE_RADIUS * ratio;
+  const border = 1.25 * ratio;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = side;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.beginPath();
+  ctx.roundRect(border / 2, border / 2, side - border, side - border, r - border / 2);
+  ctx.fillStyle = "rgba(24, 24, 27, 0.92)";
+  ctx.fill();
+  ctx.lineWidth = border;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+  const mid = side / 2;
+  map.addImage(BADGE, ctx.getImageData(0, 0, side, side), {
+    pixelRatio: ratio,
+    // only the straight middle stretches: the round ends keep their shape
+    stretchX: [[mid - 1, mid + 1]],
+    stretchY: [[mid - 1, mid + 1]],
+    content: [mid - 1, mid - 1, mid + 1, mid + 1],
+  });
 }

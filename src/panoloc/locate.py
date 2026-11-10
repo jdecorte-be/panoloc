@@ -1,15 +1,20 @@
 """Located signs for the web map: a small HTTP server in front of find_signs.
 
     python -m panoloc.locate serve [--port 8765]
-    python -m panoloc.locate WEST,SOUTH,EAST,NORTH   # fill the cache of an area
+    python -m panoloc.locate [WEST,SOUTH,EAST,NORTH]   # fill the cache: an area, or every picture
 
 find_signs slows down much faster than the area grows (26 s for 1 x 0.6 km of
 Strasbourg): the map asks for fixed tiles, located in a pool of processes and kept
 in the `located_tiles` collection. A tile is located again when the algorithm's
-source files change (see fingerprint).
+source files change (see fingerprint). The cache is in MongoDB, next to the
+pictures, or with --cache local in a SQLite file (data/located_tiles.sqlite): the
+pictures are still read from MongoDB, nothing is written to it.
 
 The server answers at once with the cached tiles, and keeps locating the others,
 the last asked first: the map asks again for those still pending.
+
+Zoomed out, the map asks for /counts instead: the located signs, counted in
+squares of tiles, from a count per tile held in memory.
 """
 
 import argparse
@@ -18,16 +23,22 @@ import json
 import math
 import multiprocessing
 import os
+import re
+import resource
 import signal
+import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Iterable
-from concurrent.futures import Future, ProcessPoolExecutor
+from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import CancelledError, Future, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+from tqdm import tqdm
 
 from panoloc.bbox import M_PER_DEG_LAT, Item, pictures, to_item
 from panoloc.deduplication import find_signs
@@ -39,11 +50,30 @@ CELL_M = 0.5
 MAX_DIST_M = 45
 TILE_DEG = 0.0025  # ~280 x 185 m in Strasbourg: ~3 s for its busiest streets
 CACHE = "located_tiles"
+# --cache local: the default file
+LOCAL_CACHE = Path("data/located_tiles.sqlite")
+# ids per SQLite query, under its limit of bound variables
+SQL_VARIABLES = 500
 # the code find_signs runs: a change in one of them locates the tiles again
 ALGORITHM = ("annotations.py", "deduplication.py", "geo.py", "triangulation.py")
 PORT = 8765
 # tiles waiting to be located: a long pan over the city drops the oldest ones
 MAX_WAITING = 2000
+# pictures further north or south are left out: the web map's Mercator stops at
+# 85.05, and near a pole a tile's margin spans every longitude (a bad GPS at 90 made
+# the listing of the tiles take all the memory)
+MAX_LAT = 85.0
+# tiles located at once by a fill
+CHUNK_TILES = 2000
+# times a tile is located before it is given up: a worker that crashes (out of
+# memory...) takes the tiles of the others with it, located again in a new pool
+MAX_ATTEMPTS = 3
+# memory a worker may use: a tile needing more fails (MemoryError) instead of the
+# whole machine running out of memory; its busiest tiles take several GB
+WORKER_MEM_GB = 3.0
+# memory left to the rest of the machine when choosing the number of workers
+RESERVED_MEM_GB = 4.0
+GB = 1 << 30
 
 Tile = tuple[int, int]
 # a tile and the parameters it is located with
@@ -133,6 +163,23 @@ def tiles_of(west: float, south: float, east: float, north: float) -> list[Tile]
     ]
 
 
+def seen_tiles(max_m: float = MAX_DIST_M) -> list[Tile]:
+    """Every tile whose signs a picture with a traffic sign may see: the tiles its
+    camera is within max_m of, as area_items grows a tile. In order, by column."""
+    tiles: set[Tile] = set()
+    dlat = max_m / M_PER_DEG_LAT
+    docs = pictures().find(
+        {"semantics.key": TRAFFIC_SIGN}, {"_id": 0, "geometry.coordinates": 1}
+    )
+    for doc in tqdm(docs, desc="listing the tiles", unit=" pictures", unit_scale=True):
+        lon, lat = doc["geometry"]["coordinates"]
+        if not abs(lat) <= MAX_LAT:  # not: NaN too
+            continue
+        dlon = dlat / math.cos(math.radians(lat))
+        tiles.update(tiles_of(lon - dlon, lat - dlat, lon + dlon, lat + dlat))
+    return sorted(tiles)
+
+
 def tile_name(tile: Tile) -> str:
     """ "i:j", how the map names a tile."""
     return f"{tile[0]}:{tile[1]}"
@@ -146,6 +193,131 @@ def parse_tile(name: str) -> Tile:
 def tile_id(tile: Tile, cell_m: float, max_m: float) -> str:
     # :g: 45 and 45.0 are the same tile
     return f"{tile_name(tile)}:{cell_m:g}:{max_m:g}"
+
+
+class MongoCache:
+    """The located tiles in a collection of the pictures' database."""
+
+    def __init__(self) -> None:
+        self.collection = pictures().database[CACHE]
+
+    def get(self, ids: list[str], current: str) -> dict[str, list[Item]]:
+        """The signs of the tiles located with this code, by id."""
+        docs = self.collection.find(
+            {
+                "_id": {"$in": ids},
+                "fingerprint": current,
+                "signs": {"$exists": True},  # not the first format of the cache
+            }
+        )
+        return {doc["_id"]: doc["signs"] for doc in docs}
+
+    def put(self, id: str, located_with: str, signs: list[Item]) -> None:
+        self.collection.update_one(
+            {"_id": id},
+            {"$set": {"fingerprint": located_with, "signs": signs}},
+            upsert=True,
+        )
+
+    def counts(
+        self, suffix: str, current: str
+    ) -> Iterable[tuple[str, int, float, float]]:
+        """The tiles with a sign whose id ends with suffix, located with this code:
+        their id, signs and the sums of their coordinates."""
+
+        def total(axis: int) -> dict:
+            return {
+                "$sum": {
+                    "$map": {
+                        "input": "$signs",
+                        "in": {"$arrayElemAt": ["$$this.position", axis]},
+                    }
+                }
+            }
+
+        docs = self.collection.aggregate(
+            [
+                {
+                    "$match": {
+                        "_id": {"$regex": re.escape(suffix) + "$"},
+                        "fingerprint": current,
+                        "signs.0": {"$exists": True},
+                    }
+                },
+                {
+                    "$project": {
+                        "n": {"$size": "$signs"},
+                        "lon": total(0),
+                        "lat": total(1),
+                    }
+                },
+            ]
+        )
+        return ((d["_id"], d["n"], d["lon"], d["lat"]) for d in docs)
+
+
+class LocalCache:
+    """The located tiles in a SQLite file, with the counts of MongoCache.counts
+    kept beside the signs."""
+
+    def __init__(self, path: Path = LOCAL_CACHE) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # one connection, shared by the server's and the pool's threads in turn
+        self.db = sqlite3.connect(path, timeout=60, check_same_thread=False)
+        self.lock = threading.Lock()
+        with self.lock, self.db:
+            # WAL: a fill and the server can use the same file at once
+            self.db.execute("PRAGMA journal_mode = WAL")
+            self.db.execute(
+                f"""CREATE TABLE IF NOT EXISTS {CACHE} (
+                    id TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL,
+                    signs TEXT NOT NULL,
+                    n INTEGER NOT NULL,
+                    lon REAL NOT NULL,
+                    lat REAL NOT NULL
+                )"""
+            )
+
+    def get(self, ids: list[str], current: str) -> dict[str, list[Item]]:
+        rows = []
+        with self.lock:
+            for first in range(0, len(ids), SQL_VARIABLES):
+                chunk = ids[first : first + SQL_VARIABLES]
+                rows += self.db.execute(
+                    f"SELECT id, signs FROM {CACHE} WHERE fingerprint = ? "
+                    f"AND id IN ({','.join('?' * len(chunk))})",
+                    [current, *chunk],
+                ).fetchall()
+        # decoded out of the lock: the busiest tiles hold MBs of rays
+        return {id: json.loads(signs) for id, signs in rows}
+
+    def put(self, id: str, located_with: str, signs: list[Item]) -> None:
+        row = (
+            id,
+            located_with,
+            json.dumps(signs),
+            len(signs),
+            sum(s["position"][0] for s in signs),
+            sum(s["position"][1] for s in signs),
+        )
+        with self.lock, self.db:
+            self.db.execute(
+                f"INSERT OR REPLACE INTO {CACHE} VALUES (?, ?, ?, ?, ?, ?)", row
+            )
+
+    def counts(
+        self, suffix: str, current: str
+    ) -> Iterable[tuple[str, int, float, float]]:
+        with self.lock:
+            return self.db.execute(
+                f"SELECT id, n, lon, lat FROM {CACHE} "
+                "WHERE fingerprint = ? AND n > 0 AND substr(id, -?) = ?",
+                (current, len(suffix), suffix),
+            ).fetchall()
+
+
+TileCache = MongoCache | LocalCache
 
 
 def locate_tile(key: Key) -> tuple[str, list[Item]]:
@@ -162,8 +334,33 @@ def locate_tile(key: Key) -> tuple[str, list[Item]]:
     return fingerprint(), signs
 
 
-def _exit_with(parent: int) -> None:
-    """Worker initializer: exit when the server is gone, even killed (-9)."""
+def available_memory() -> int | None:
+    """Bytes the kernel can give without swapping, None if unknown."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return None
+
+
+def default_workers(worker_mem_gb: float) -> int:
+    """One per CPU, as many as fit in the memory available at worker_mem_gb each."""
+    workers = os.cpu_count() or 1
+    if (available := available_memory()) is not None:
+        fit = (available - RESERVED_MEM_GB * GB) // (worker_mem_gb * GB)
+        workers = min(workers, max(1, int(fit)))
+    return workers
+
+
+def _init_worker(parent: int, mem_bytes: int) -> None:
+    """Worker initializer: cap its memory, and exit when the server is gone,
+    even killed (-9)."""
+    # RLIMIT_DATA, not RLIMIT_AS: the address space reserved (malloc arenas,
+    # shared libraries) does not count, only the memory written to
+    resource.setrlimit(resource.RLIMIT_DATA, (mem_bytes, mem_bytes))
 
     def watch() -> None:
         while os.getppid() == parent:
@@ -177,65 +374,167 @@ class Locator:
     """Locates tiles in a pool of processes, the last asked first, into the cache."""
 
     def __init__(
-        self, workers: int | None = None, max_waiting: float = MAX_WAITING
+        self,
+        workers: int | None = None,
+        max_waiting: float = MAX_WAITING,
+        worker_mem_gb: float = WORKER_MEM_GB,
+        cache: TileCache | None = None,
     ) -> None:
-        self.workers = workers or os.cpu_count() or 1
+        self.workers = workers or default_workers(worker_mem_gb)
+        self.worker_mem_gb = worker_mem_gb
+        print(
+            f"{self.workers} workers, {worker_mem_gb:g} GB of memory each at most",
+            file=sys.stderr,
+        )
         self.max_waiting = max_waiting
-        self.cache = pictures().database[CACHE]
+        self.cache = cache or MongoCache()
         self.changed = threading.Condition()  # guards the fields below
         self.waiting: list[Key] = []  # the last asked at the end
         self.running: set[Key] = set()
         self.pool: ProcessPoolExecutor | None = None
         self.pool_fingerprint: str | None = None
+        self.attempts: dict[Key, int] = {}  # the tiles that failed, and how often
+        self.failed: set[Key] = set()  # given up after MAX_ATTEMPTS
+        self.closed = False
+        # called once per tile located or given up, from a pool's thread
+        self.on_done: Callable[[], None] | None = None
+        self.counts_lock = threading.Lock()  # guards the fields below
+        # tile -> its signs and the sums of their coordinates, for the default
+        # parameters; the tiles without a sign are left out
+        self.tile_counts: dict[Tile, tuple[int, float, float]] = {}
+        self.counts_fingerprint: str | None = None
 
     def cached(self, keys: Iterable[Key]) -> dict[Key, list[Item]]:
         by_id = {tile_id(*k): k for k in keys}
-        docs = self.cache.find(
-            {
-                "_id": {"$in": list(by_id)},
-                "fingerprint": fingerprint(),
-                "signs": {"$exists": True},  # not the first format of the cache
-            }
-        )
-        return {by_id[doc["_id"]]: doc["signs"] for doc in docs}
+        found = self.cache.get(list(by_id), fingerprint())
+        return {by_id[id]: signs for id, signs in found.items()}
+
+    def _load_counts(self, current: str) -> None:
+        """The counts of the cached tiles located with this code. Counts lock held."""
+        if self.counts_fingerprint == current:
+            return
+        suffix = tile_id((0, 0), CELL_M, MAX_DIST_M).removeprefix("0:0")
+        self.tile_counts = {
+            parse_tile(id.removesuffix(suffix)): (n, lon, lat)
+            for id, n, lon, lat in self.cache.counts(suffix, current)
+        }
+        self.counts_fingerprint = current
+
+    def _count(self, key: Key, located_with: str, signs: list[Item]) -> None:
+        """Keep the counts up to date with a tile just located."""
+        tile, cell_m, max_m = key
+        with self.counts_lock:
+            if (cell_m, max_m) != (CELL_M, MAX_DIST_M):
+                return
+            if located_with != self.counts_fingerprint:
+                return  # loaded again from the cache on the next ask
+            if signs:
+                self.tile_counts[tile] = (
+                    len(signs),
+                    sum(s["position"][0] for s in signs),
+                    sum(s["position"][1] for s in signs),
+                )
+            else:
+                self.tile_counts.pop(tile, None)
+
+    def counts(
+        self, west: float, south: float, east: float, north: float, size: int
+    ) -> list[list[float]]:
+        """The located signs of the bbox in squares of size x size tiles, aligned
+        on multiples of size: [lon, lat, count], at the mean position of the signs.
+        Only the cached tiles: nothing is located."""
+        i0 = math.floor(west / TILE_DEG) // size * size
+        j0 = math.floor(south / TILE_DEG) // size * size
+        i1, j1 = math.ceil(east / TILE_DEG), math.ceil(north / TILE_DEG)
+        squares: dict[Tile, list[float]] = {}
+        with self.counts_lock:
+            self._load_counts(fingerprint())
+            for (i, j), (n, lon, lat) in self.tile_counts.items():
+                if i0 <= i < i1 and j0 <= j < j1:
+                    square = squares.setdefault((i // size, j // size), [0, 0.0, 0.0])
+                    square[0] += n
+                    square[1] += lon
+                    square[2] += lat
+        return [
+            [round(lon / n, 6), round(lat / n, 6), n]
+            for n, lon, lat in squares.values()
+        ]
 
     def _fill(self) -> None:
         """Start the waiting tiles while there are idle workers. Lock held."""
         current = fingerprint()
-        if current != self.pool_fingerprint:
-            # spawned, not forked: the new workers import the edited code
-            if self.pool:
-                self.pool.shutdown(wait=False, cancel_futures=True)
-            self.pool = ProcessPoolExecutor(
-                self.workers,
-                mp_context=multiprocessing.get_context("spawn"),
-                initializer=_exit_with,
-                initargs=(os.getpid(),),
-            )
-            self.pool_fingerprint = current
         while self.waiting and len(self.running) < self.workers:
+            if self.pool is None or current != self.pool_fingerprint:
+                old = self.pool
+                # spawned, not forked: the new workers import the edited code
+                self.pool = ProcessPoolExecutor(
+                    self.workers,
+                    mp_context=multiprocessing.get_context("spawn"),
+                    initializer=_init_worker,
+                    initargs=(os.getpid(), int(self.worker_mem_gb * GB)),
+                )
+                self.pool_fingerprint = current
+                # after: the tiles it cancels come back here, for the new pool
+                if old:
+                    old.shutdown(wait=False, cancel_futures=True)
             key = self.waiting.pop()
+            try:
+                future = self.pool.submit(locate_tile, key)
+            except BrokenProcessPool:  # a worker crashed: before its tiles say so
+                self.waiting.append(key)
+                self.pool = None
+                continue
             self.running.add(key)
-            future = self.pool.submit(locate_tile, key)
-            future.add_done_callback(partial(self._finished, key))
+            future.add_done_callback(partial(self._finished, key, self.pool))
 
-    def _finished(self, key: Key, future: Future) -> None:
+    def _finished(self, key: Key, pool: ProcessPoolExecutor, future: Future) -> None:
+        retry = done = broken = False
         try:
             located_with, signs = future.result()
-            self.cache.update_one(
-                {"_id": tile_id(*key)},
-                {"$set": {"fingerprint": located_with, "signs": signs}},
-                upsert=True,
+            self.cache.put(tile_id(*key), located_with, signs)
+            self._count(key, located_with, signs)
+            done = True
+        except CancelledError:
+            retry = True  # by a new pool, for edited code: not the tile's fault
+        except MemoryError:
+            # it would need as much again: given up at once
+            tqdm.write(
+                f"tile {tile_id(*key)} failed: over {self.worker_mem_gb:g} GB "
+                "of memory (--worker-mem)",
+                file=sys.stderr,
             )
+            self.failed.add(key)
+            done = True
         except Exception as e:  # noqa: BLE001 - one tile, the others go on
-            print(f"tile {tile_id(*key)} failed: {e!r}", file=sys.stderr)
+            attempts = self.attempts.get(key, 0) + 1
+            retry = attempts < MAX_ATTEMPTS
+            broken = isinstance(e, BrokenProcessPool)
+            # above the progress bar, if any
+            tqdm.write(
+                f"tile {tile_id(*key)} failed ({attempts}/{MAX_ATTEMPTS}): "
+                + ("a worker crashed" if broken else repr(e)),
+                file=sys.stderr,
+            )
+            self.attempts[key] = attempts
+            if not retry:
+                self.failed.add(key)
+                done = True
         with self.changed:
+            if broken and self.pool is pool:
+                self.pool = None  # a new one on the next fill
             self.running.discard(key)
-            self._fill()
+            if retry and not self.closed:
+                self.waiting.append(key)
+            if not self.closed:
+                self._fill()
+            # held: counted before locate returns
+            if done and self.on_done:
+                self.on_done()
             self.changed.notify_all()
 
     def close(self) -> None:
         with self.changed:
+            self.closed = True
             self.waiting.clear()
             if self.pool:
                 self.pool.shutdown(wait=False, cancel_futures=True)
@@ -260,12 +559,44 @@ class Locator:
             while (left := deadline - time.monotonic()) > 0 and any(
                 k in self.running or k in self.waiting for k in missing
             ):
-                self.changed.wait(left)
+                # None: a lock's timeout cannot be infinite
+                self.changed.wait(None if math.isinf(left) else left)
         return found | self.cached(missing)
 
 
-def serve(port: int) -> None:
-    locator = Locator()
+def locate_chunks(
+    locator: Locator, tiles: list[Tile], cell_m: float, max_m: float
+) -> Iterator[dict[Key, list[Item]]]:
+    """The located tiles, CHUNK_TILES at a time, under a progress bar."""
+    chunks = [
+        [(t, cell_m, max_m) for t in tiles[first : first + CHUNK_TILES]]
+        for first in range(0, len(tiles), CHUNK_TILES)
+    ]
+    signs = done = 0
+    with tqdm(total=len(tiles), unit="tile", smoothing=0.01) as bar:
+        locator.on_done = partial(bar.update, 1)
+        for n, keys in enumerate(chunks):
+            if n + 1 < len(chunks):
+                # queued under this chunk: located by the workers it leaves idle
+                # at its end, and while the caller handles it
+                locator.locate(chunks[n + 1], wait_s=0)
+            found = locator.locate(keys, wait_s=math.inf)
+            done += len(keys)
+            # the cached ones, not seen by on_done (ahead: the next chunk's)
+            bar.update(max(0, done - bar.n))
+            signs += sum(map(len, found.values()))
+            bar.set_postfix(signs=signs, failed=len(locator.failed))
+            yield found
+        locator.on_done = None
+
+
+def serve(
+    port: int,
+    workers: int | None = None,
+    worker_mem_gb: float = WORKER_MEM_GB,
+    cache: TileCache | None = None,
+) -> None:
+    locator = Locator(workers, worker_mem_gb=worker_mem_gb, cache=cache)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -274,10 +605,24 @@ def serve(port: int) -> None:
                 self.send_response(204)
                 self.end_headers()
                 return
+            q = parse_qs(url.query)
+            if url.path == "/counts":
+                try:
+                    west, south, east, north = (
+                        float(v) for v in q["bbox"][0].split(",")
+                    )
+                    size = int(q["size"][0])
+                    if size < 1:
+                        raise ValueError(size)
+                except KeyError, ValueError:
+                    self.send_error(400, "expected bbox=w,s,e,n&size=tiles")
+                    return
+                counts = locator.counts(west, south, east, north, size)
+                self._json({"counts": counts})
+                return
             if url.path != "/tiles":
                 self.send_error(404)
                 return
-            q = parse_qs(url.query)
             try:
                 tiles = [parse_tile(t) for t in q["tiles"][0].split(",") if t]
                 cell_m = float(q.get("cell", [CELL_M])[0])
@@ -288,12 +633,15 @@ def serve(port: int) -> None:
                 return
             keys = [(t, cell_m, max_m) for t in tiles]
             found = locator.locate(keys, wait_s)
-            body = json.dumps(
+            self._json(
                 {
                     "tiles": {tile_name(k[0]): found[k] for k in keys if k in found},
                     "pending": [tile_name(k[0]) for k in keys if k not in found],
                 }
-            ).encode()
+            )
+
+        def _json(self, value: object) -> None:
+            body = json.dumps(value).encode()
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -319,21 +667,76 @@ def serve(port: int) -> None:
     server.serve_forever()
 
 
+def add_worker_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--workers",
+        type=int,
+        help="processes locating tiles (default: one per CPU, as many as fit in memory)",
+    )
+    parser.add_argument(
+        "--worker-mem",
+        type=float,
+        default=WORKER_MEM_GB,
+        help=f"GB of memory a worker may use (default: {WORKER_MEM_GB:g})",
+    )
+
+
+def add_cache_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cache",
+        choices=("db", "local"),
+        default="db",
+        help="where the located tiles are kept: db, the pictures' MongoDB "
+        "(default), or local, a SQLite file (--cache-file)",
+    )
+    parser.add_argument(
+        "--cache-file",
+        type=Path,
+        default=LOCAL_CACHE,
+        help=f"the file of --cache local (default: {LOCAL_CACHE})",
+    )
+
+
+def open_cache(args: argparse.Namespace) -> TileCache:
+    """The cache add_cache_args asked for."""
+    if args.cache == "local":
+        print(f"cache: {args.cache_file}", file=sys.stderr)
+        return LocalCache(args.cache_file)
+    return MongoCache()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("target", help='"serve", or west,south,east,north to fill')
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help='"serve", or west,south,east,north to fill (none: every picture)',
+    )
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--cell", type=float, default=CELL_M)
     parser.add_argument("--max-dist", type=float, default=MAX_DIST_M)
+    add_worker_args(parser)
+    add_cache_args(parser)
     args = parser.parse_args()
+    cache = open_cache(args)
     if args.target == "serve":
-        serve(args.port)
+        serve(args.port, args.workers, args.worker_mem, cache)
         return
-    west, south, east, north = (float(v) for v in args.target.split(","))
-    keys = [(t, args.cell, args.max_dist) for t in tiles_of(west, south, east, north)]
-    found = Locator(max_waiting=math.inf).locate(keys, wait_s=math.inf)
+    if args.target:
+        west, south, east, north = (float(v) for v in args.target.split(","))
+        tiles = tiles_of(west, south, east, north)
+    else:
+        tiles = seen_tiles(args.max_dist)
+    locator = Locator(
+        args.workers, max_waiting=math.inf, worker_mem_gb=args.worker_mem, cache=cache
+    )
+    signs = located = 0
+    for found in locate_chunks(locator, tiles, args.cell, args.max_dist):
+        signs += sum(map(len, found.values()))
+        located += len(found)
+    locator.close()
     print(
-        f"{sum(map(len, found.values()))} signs in {len(found)}/{len(keys)} tiles",
+        f"{signs} signs in {located}/{len(tiles)} tiles ({len(locator.failed)} failed)",
         file=sys.stderr,
     )
 

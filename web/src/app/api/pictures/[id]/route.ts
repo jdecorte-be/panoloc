@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { detectionsOf, TRAFFIC_SIGN, type SignTag } from "@/lib/detections";
+import { cachedJson, errorJson, PICTURE_DATA } from "@/lib/http";
 import { pictures } from "@/lib/mongodb";
 
 /** GET /api/pictures/<id> -> the traffic signs detected in that picture, by box. */
@@ -24,10 +25,10 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/picture
         },
       ])
       .toArray();
-    if (!doc) return Response.json({ error: `picture ${id} not found` }, { status: 404 });
-    return Response.json({ detections: await detectionsOf(id, doc.tags ?? []) });
+    if (!doc) return errorJson(`picture ${id} not found`, 404);
+    return cachedJson({ detections: await detectionsOf(id, doc.tags ?? []) }, PICTURE_DATA);
   } catch (error) {
     console.error(`GET /api/pictures/${id} failed:`, error);
-    return Response.json({ error: "Could not query MongoDB" }, { status: 503 });
+    return errorJson("Could not query MongoDB", 503);
   }
 }

@@ -1,3 +1,6 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+overrides:
+  # GHSA-g3hv-75wg-m249, through the lint toolchain only (typescript-estree)
+  "@typescript-eslint/typescript-estree>minimatch": ">=11.0.1"
