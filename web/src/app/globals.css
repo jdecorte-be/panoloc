@@ -96,10 +96,6 @@ body {
   backdrop-filter: blur(5px);
   box-shadow: 0 2px 8px rgb(46 16 101 / 0.18);
   will-change: transform;
-  transition:
-    scale 120ms,
-    opacity 150ms,
-    border-color 120ms;
 }
 .glass-count {
   border-width: 2.5px;
@@ -113,7 +109,6 @@ body {
     0 0 6px rgb(255 255 255 / 0.7);
 }
 .glass-count.hover {
-  scale: 1.08;
   border-width: 3.5px;
 }
 .glass-sign {
@@ -124,9 +119,8 @@ body {
   object-fit: contain;
 }
 .glass-sign.hover {
-  scale: 1.2;
   border-color: rgb(255 140 0);
-  border-width: 2.5px;
+  border-width: 3px;
 }
 .glass-sign.seen {
   border-color: rgb(255 140 0);

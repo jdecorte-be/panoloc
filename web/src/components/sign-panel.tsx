@@ -221,7 +221,7 @@ export function SignPanel({
   const details = expanded ? "" : " max-md:hidden";
   const sign = selected && located.find((s) => s.id === selected.sign);
   return (
-    <aside className="panel relative z-10 max-h-[50dvh] shrink-0 overflow-y-auto border-t border-line bg-surface px-3 py-2.5 text-sm md:absolute md:top-3 md:left-3 md:max-h-[calc(100%-1.5rem)] md:w-[min(19rem,calc(100%-5rem))] md:rounded md:border md:shadow-md">
+    <aside className="panel relative z-10 max-h-[50dvh] shrink-0 overflow-y-auto border-t border-line bg-surface px-3 py-2.5 text-sm md:absolute md:top-[3.75rem] md:left-3 md:max-h-[calc(100%-4.5rem)] md:w-[min(19rem,calc(100%-5rem))] md:rounded md:border md:shadow-md">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <Summary status={status} signs={located.length} cameras={cameras} total={total} />

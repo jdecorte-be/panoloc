@@ -21,6 +21,7 @@ import {
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { type Place, SearchBar } from "@/components/search-bar";
 import { SignPanel, type MapStatus } from "@/components/sign-panel";
 import basicStyle from "@/lib/basemap/basic-style.json";
 import { boxesOf, signLabel } from "@/lib/labels";
@@ -1004,6 +1005,25 @@ export function SignMap() {
   );
   const onClose = useCallback(() => setSelected(null), []);
 
+  // the search: the places near the view first; a place found -> the full map on it
+  const near = useCallback(
+    () => mapRef.current?.getCenter().toArray() as [number, number] | undefined,
+    [],
+  );
+  const onSearch = useCallback((place: Place) => {
+    const map = mapRef.current;
+    if (!map) return;
+    setSelected(null);
+    const padding = window.matchMedia("(min-width: 768px)").matches
+      ? { top: 24, bottom: 24, right: 24, left: PANEL_PX }
+      : 16;
+    if (place.bounds) {
+      map.fitBounds(place.bounds, { padding, maxZoom: DETAIL_ZOOM + 1 });
+    } else {
+      map.flyTo({ center: place.center, zoom: DETAIL_ZOOM + 1 });
+    }
+  }, []);
+
   const busy = status.kind === "loading" || status.kind === "locating";
   const progress =
     status.kind === "locating"
@@ -1014,6 +1034,7 @@ export function SignMap() {
     // phones: the panel below the map; wider screens: floating over it
     <div className="relative flex h-full w-full flex-col overflow-hidden md:block">
       <div className="relative min-h-0 flex-1 md:absolute md:inset-0">
+        <SearchBar near={near} onPick={onSearch} />
         {selected && (
           <Panorama
             key={selected.pictureId}
