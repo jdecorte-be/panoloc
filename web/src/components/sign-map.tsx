@@ -3,11 +3,18 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import type { FeatureCollection, LineString, Point } from "geojson";
-import maplibregl, {
+// maplibre-gl 6 is ESM only, named exports; its Map not to shadow the JS Map
+import {
   type ExpressionSpecification,
   type GeoJSONSource,
+  GeolocateControl,
+  getVersion,
   type MapGeoJSONFeature,
-  type Map as MapLibreMap,
+  Map as MapLibreMap,
+  NavigationControl,
+  Popup,
+  ScaleControl,
+  setWorkerUrl,
 } from "maplibre-gl";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,6 +45,12 @@ import type {
   TileSign,
   TotalResponse,
 } from "@/lib/types";
+
+// the worker copied by scripts/copy-maplibre-worker.mjs: the bundle loses the one next
+// to maplibre-gl.mjs; the version in the URL, a new one for the cache on each upgrade
+if (typeof window !== "undefined") {
+  setWorkerUrl(`/maplibre/maplibre-gl-worker.mjs?v=${getVersion()}`);
+}
 
 const loadPanorama = () => import("@/components/panorama").then((m) => m.Panorama);
 // WebGL viewer: browser only, its chunk fetched while the browser is idle
@@ -654,7 +667,7 @@ export function SignMap() {
     if (!container.current) return;
     const initial = currentBasemap();
     appliedRef.current = initial;
-    const map = new maplibregl.Map({
+    const map = new MapLibreMap({
       container: container.current,
       style: BASEMAPS[initial].style,
       center: FALLBACK_CENTER,
@@ -665,12 +678,12 @@ export function SignMap() {
       maxPitch: 60,
     });
     mapRef.current = map;
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(
-      new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true } }),
+      new GeolocateControl({ positionOptions: { enableHighAccuracy: true } }),
       "top-right",
     );
-    map.addControl(new maplibregl.ScaleControl({}), "bottom-right");
+    map.addControl(new ScaleControl({}), "bottom-right");
 
     let controller = new AbortController();
     const reload = () => {
@@ -679,7 +692,8 @@ export function SignMap() {
       void refresh(map, controller.signal);
     };
 
-    map.on("styleimagemissing", (e) => addBlankImage(map, e.id));
+    // the icons the basemap's sprite lacks: drawn as nothing, no warning each
+    map.setMissingStyleImageResolver((id) => addBlankImage(map, id));
     // the first style, and each basemap change: the layers of the map on top of it
     map.on("style.load", () => {
       addLayers(map, appliedRef.current === "dark");
@@ -721,7 +735,7 @@ export function SignMap() {
     }
 
     // a sign under the pointer: bigger, and its name in a tooltip
-    const tooltip = new maplibregl.Popup({
+    const tooltip = new Popup({
       closeButton: false,
       closeOnClick: false,
       offset: SIGN_DISC_PX + 6,

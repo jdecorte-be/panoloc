@@ -66,5 +66,6 @@ The picture and its annotations come from the Panoramax API (`sd` derivative).
 | `src/lib/sign-codes.ts` | TS port of `sign_types_of` / `icon_key` (keep in sync with the Python) |
 | `src/lib/sign-images.ts` | Rasterizes the SVG pictograms for MapLibre |
 | `scripts/copy-signs.mjs` | Copies `src/panoloc/frontend/assets/signs` to `public/signs` before `dev` / `build` |
+| `scripts/copy-maplibre-worker.mjs` | Copies MapLibre's web worker to `public/maplibre` before `dev` / `build` (maplibre-gl 6 is ESM only: the bundle loses it) |
 
 The basemaps are [OpenFreeMap](https://openfreemap.org/)'s vector styles (Light, Dark, Streets), or the standard [OpenStreetMap](https://www.openstreetmap.org/) tiles (OSM), all without an API key. The viewer's pick is kept in the browser; by default the map follows the system's light or dark mode.
