@@ -144,6 +144,7 @@ export class GlassMarkers {
   }
 
   hoverCount(index: number | undefined) {
+    if (index === this.hoveredCount) return;
     if (this.hoveredCount !== undefined)
       this.countEls[this.hoveredCount]?.classList.remove("hover");
     this.hoveredCount = index;
@@ -151,6 +152,7 @@ export class GlassMarkers {
   }
 
   hoverSign(id: string | undefined) {
+    if (id === this.hoveredSign) return;
     if (this.hoveredSign !== undefined)
       this.signEls.get(this.hoveredSign)?.classList.remove("hover");
     this.hoveredSign = id;

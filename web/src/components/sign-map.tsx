@@ -592,7 +592,6 @@ export function SignMap() {
         )
           return;
         if (drawnRef.current.counts !== url) {
-          map.removeFeatureState({ source: "counts" }); // the ids are new: no hover left behind
           map.getSource<GeoJSONSource>("counts")?.setData(countPoints(counts));
           glassRef.current?.setCounts(
             counts.map(([lon, lat, count]) => ({
@@ -781,13 +780,9 @@ export function SignMap() {
     });
     let hoveredSign: string | undefined;
     const hoverSign = (id: string | undefined) => {
+      // the hover drawn by GlassMarkers only: no feature state, no repaint of the
+      // map under the blur
       if (id === hoveredSign) return;
-      if (hoveredSign !== undefined && map.getSource("signs")) {
-        map.setFeatureState(
-          { source: "signs", id: hoveredSign },
-          { hover: false },
-        );
-      }
       hoveredSign = id;
       glass.hoverSign(id);
       const sign =
@@ -798,7 +793,6 @@ export function SignMap() {
         tooltip.remove();
         return;
       }
-      map.setFeatureState({ source: "signs", id }, { hover: true });
       tooltip
         .setLngLat(sign.position)
         .setDOMContent(tooltipOf(sign))
@@ -825,15 +819,8 @@ export function SignMap() {
       });
     });
     // the square under the pointer stands out
-    let hover: number | string | undefined;
-    const setHover = (id: number | string | undefined) => {
-      if (hover !== undefined)
-        map.setFeatureState({ source: "counts", id: hover }, { hover: false });
-      hover = id;
+    const setHover = (id: number | string | undefined) =>
       glass.hoverCount(id === undefined ? undefined : Number(id));
-      if (id !== undefined)
-        map.setFeatureState({ source: "counts", id }, { hover: true });
-    };
     map.on("mousemove", "count-circles", (e) => setHover(e.features?.[0]?.id));
     map.on("mouseleave", "count-circles", () => setHover(undefined));
     // a camera -> its picture, facing the way the camera did
